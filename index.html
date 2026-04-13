@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Olympus Hub — Pegasus</title>
+  <meta name="description" content="Pegasus shell for Zeus and the Olympus agent system." />
+  <style>
+    :root {
+      --bg: #0a0b11;
+      --bg-elev: rgba(255,255,255,0.06);
+      --bg-elev-2: rgba(255,255,255,0.09);
+      --panel: rgba(10,12,20,0.82);
+      --panel-strong: rgba(12,15,27,0.94);
+      --text: #eef2ff;
+      --muted: #9ba6c7;
+      --line: rgba(255,255,255,0.10);
+      --accent: #8b5cf6;
+      --accent-soft: rgba(139,92,246,0.16);
+      --good: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --shadow: 0 24px 70px rgba(0,0,0,0.45);
+      --radius: 22px;
+      --radius-sm: 16px;
+      --sidebar-w: 290px;
+      --utility-w: 320px;
+      --header-h: 68px;
+      --composer-h: 88px;
+      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top, rgba(139,92,246,0.16), transparent 30%),
+        radial-gradient(circle at 85% 15%, rgba(56,189,248,0.12), transparent 22%),
+        linear-gradient(180deg, #090b12 0%, #06070c 100%);
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr var(--utility-w);
+      height: 100vh;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .sidebar, .main, .utility {
+      min-height: 0;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, rgba(14,17,30,0.96), rgba(8,10,18,0.96));
+      border-radius: calc(var(--radius) + 2px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main {
+      background: linear-gradient(180deg, rgba(8,10,18,0.82), rgba(8,10,18,0.92));
+      border-radius: var(--radius);
+      display: grid;
+      grid-template-rows: var(--header-h) 1fr var(--composer-h);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .utility {
+      background: linear-gradient(180deg, rgba(12,14,24,0.94), rgba(9,11,18,0.96));
+      border-radius: calc(var(--radius) + 2px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .brand {
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent), rgba(255,255,255,0.2));
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      box-shadow: 0 8px 24px rgba(139,92,246,0.35);
+      flex: 0 0 auto;
+    }
+
+    .brand-copy { min-width: 0; }
+    .brand-copy h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .brand-copy p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .new-thread {
+      margin: 16px 18px 10px;
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .sidebar-section {
+      padding: 8px 14px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .section-label {
+      padding: 6px 6px 2px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .agent-list, .thread-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: auto;
+      padding: 2px 4px 10px;
+    }
+
+    .agent-item, .thread-item {
+      border: 1px solid transparent;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      border-radius: 16px;
+      padding: 12px;
+      cursor: pointer;
+      transition: 160ms ease;
+    }
+
+    .agent-item:hover, .thread-item:hover {
+      background: var(--bg-elev);
+      border-color: var(--line);
+    }
+
+    .agent-item.active {
+      background: var(--accent-soft);
+      border-color: rgba(255,255,255,0.14);
+    }
+
+    .agent-top, .thread-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .agent-name, .thread-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .badge {
+      font-size: 10px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .agent-desc, .thread-preview {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .header {
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
+    }
+
+    .header-left { min-width: 0; }
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 4px;
+    }
+    .header h2 {
+      margin: 0;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      max-width: 720px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .chip, .icon-btn, .send-btn {
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      color: var(--text);
+      border-radius: 14px;
+      cursor: pointer;
+    }
+
+    .chip {
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .icon-btn {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+    }
+
+    .icon-btn.active {
+      background: var(--accent-soft);
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: 0 0 0 4px rgba(139,92,246,0.14);
+    }
+
+    .content {
+      overflow: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+
+    .hero-card, .tool-card, .status-card, .memory-card, .workspace-card {
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      border-radius: 20px;
+      padding: 16px;
+    }
+
+    .hero-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(139,92,246,0.10));
+    }
+
+    .hero-card h3, .workspace-card h3, .utility h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .hero-card p, .workspace-card p, .tool-card p, .status-card p, .memory-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .message {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .message.assistant .bubble {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .message.user {
+      justify-content: flex-end;
+    }
+
+    .message.user .bubble {
+      background: rgba(139,92,246,0.18);
+      border-color: rgba(139,92,246,0.28);
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 15px;
+      flex: 0 0 auto;
+    }
+
+    .bubble {
+      max-width: min(820px, 86%);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 15px;
+      line-height: 1.6;
+      font-size: 14px;
+      white-space: pre-wrap;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .meta {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .tool-card pre {
+      margin: 10px 0 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #dbe2ff;
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.03));
+    }
+
+    .composer textarea {
+      width: 100%;
+      resize: none;
+      min-height: 56px;
+      max-height: 180px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 16px;
+      font: inherit;
+      outline: none;
+    }
+
+    .send-btn {
+      padding: 0 18px;
+      height: 52px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), rgba(255,255,255,0.12));
+      border-color: transparent;
+    }
+
+    .utility-head {
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .utility-body {
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .list-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .list-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .list-item span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .theme-underworld {
+      --accent: #7c3aed;
+      --accent-soft: rgba(124,58,237,0.18);
+    }
+
+    .theme-messenger {
+      --accent: #06b6d4;
+      --accent-soft: rgba(6,182,212,0.18);
+    }
+
+    .theme-strategy {
+      --accent: #f59e0b;
+      --accent-soft: rgba(245,158,11,0.18);
+    }
+
+    .theme-builder {
+      --accent: #ef4444;
+      --accent-soft: rgba(239,68,68,0.18);
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 260px 1fr;
+      }
+      .utility {
+        display: none;
+      }
+    }
+
+    @media (max-width: 820px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .sidebar {
+        display: none;
+      }
+      .main {
+        min-height: 100vh;
+        border-radius: 0;
+      }
+      .composer {
+        grid-template-columns: auto 1fr auto;
+      }
+      .send-btn {
+        grid-column: span 3;
+      }
+      .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="appRoot">
+    <aside class="sidebar">
+      <div class="brand">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+          <div class="brand-mark">P</div>
+          <div class="brand-copy">
+            <h1>Pegasus</h1>
+            <p>Empowered by Olympus · Zeus at the helm</p>
+          </div>
+        </div>
+      </div>
+
+      <button class="new-thread" id="newThreadBtn">＋ New thread</button>
+
+      <div class="sidebar-section" style="flex:1;">
+        <div class="section-label">Pantheon</div>
+        <div class="agent-list" id="agentList"></div>
+
+        <div class="section-label">Threads</div>
+        <div class="thread-list" id="threadList"></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div class="header-left">
+          <div class="eyebrow" id="headerEyebrow">Olympus command shell</div>
+          <h2 id="headerTitle">Zeus</h2>
+          <p id="headerDescription">Master orchestrator for commands, routing, memory, and execution across your personal systems.</p>
+        </div>
+        <div class="header-actions">
+          <button class="chip" id="workspaceChip">Workspace: Chat</button>
+          <button class="chip" id="modeChip">Mock Mode</button>
+          <button class="icon-btn" id="micBtn" title="Toggle microphone">🎙️</button>
+        </div>
+      </div>
+
+      <section class="content" id="content">
+        <div class="hero-card">
+          <h3>Welcome to Pegasus</h3>
+          <p>This shell is ready for a Zeus-style command center, plus themed workspaces for each god or demigod. Keep mock mode on to test UI and routing locally, then connect Olympus on the server when your tools are live.</p>
+        </div>
+
+        <div class="workspace-grid" id="workspaceGrid"></div>
+
+        <div id="chatStream"></div>
+      </section>
+
+      <div class="composer">
+        <button class="icon-btn" id="attachBtn" title="Attach">＋</button>
+        <textarea id="promptInput" placeholder="Speak to Zeus or route into another house..."></textarea>
+        <button class="icon-btn" id="themeBtn" title="Cycle view">◐</button>
+        <button class="send-btn" id="sendBtn">Send</button>
+      </div>
+    </main>
+
+    <aside class="utility">
+      <div class="utility-head">
+        <div class="eyebrow">Olympus</div>
+        <h3>Execution & Memory</h3>
+        <p style="margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5;">Server-side tools, execution logs, and scoped memory should live here conceptually, even if you render them elsewhere later.</p>
+      </div>
+      <div class="utility-body">
+        <div class="status-card">
+          <h3>System status</h3>
+          <div class="list" id="statusList"></div>
+        </div>
+        <div class="memory-card">
+          <h3>Working memory</h3>
+          <div class="list" id="memoryList"></div>
+        </div>
+        <div class="tool-card">
+          <h3>Last tool call</h3>
+          <p>What Pegasus would send to Olympus for execution.</p>
+          <pre id="toolPayload">Awaiting command…</pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const CONFIG = {
+      mockMode: true,
+      endpoint: 'https://your-backend.example.com/command'
+    };
+
+    const AGENTS = [
+      {
+        id: 'zeus',
+        name: 'Zeus',
+        badge: 'Core',
+        role: 'Master orchestrator',
+        desc: 'Routes commands, reasons across workspaces, and governs execution flow.',
+        theme: '',
+        workspace: 'Chat',
+        header: 'Olympus command shell',
+        description: 'Master orchestrator for commands, routing, memory, and execution across your personal systems.',
+        panels: [
+          { title: 'Delegation', text: 'Route work to Hermes, Hades, Athena, or your future demigods.' },
+          { title: 'Command rituals', text: 'Wake phrase via shortcuts can drop straight into Zeus with context.' },
+          { title: 'Execution rules', text: 'Sensitive actions should require confirmation in Olympus before they run.' },
+          { title: 'Memory', text: 'Store durable facts and session notes server-side for continuity.' }
+        ]
+      },
+      {
+        id: 'hades',
+        name: 'Hades',
+        badge: 'Archive',
+        role: 'Reports & underworld',
+        desc: 'Deep reports, archives, postmortems, hidden signals, historical review.',
+        theme: 'theme-underworld',
+        workspace: 'Hiro Report',
+        header: 'Underworld archive',
+        description: 'Load the Hiro Report and other buried intelligence as if entering Hades\' domain.',
+        panels: [
+          { title: 'Hiro Report', text: 'Default landing screen for summaries, anomalies, and buried findings.' },
+          { title: 'Archive search', text: 'Compare reports, recover decisions, trace patterns across time.' },
+          { title: 'Quiet mode', text: 'A more focused layout for deep reading, evidence, and long-form analysis.' },
+          { title: 'Evidence chain', text: 'Every summary can link back to source chunks, notes, or generated artifacts.' }
+        ]
+      },
+      {
+        id: 'hermes',
+        name: 'Hermes',
+        badge: 'Ops',
+        role: 'Messaging & logistics',
+        desc: 'Email, follow-ups, dispatch, reminders, coordination, communication throughput.',
+        theme: 'theme-messenger',
+        workspace: 'Comms',
+        header: 'Messenger corridor',
+        description: 'Draft, send, track, and route communication workflows with delivery context.',
+        panels: [
+          { title: 'Outbound queue', text: 'Prepare emails, texts, and follow-ups before they hit Olympus.' },
+          { title: 'Contact view', text: 'See recipients, last interactions, and pending outreach.' },
+          { title: 'Fast actions', text: 'One command can draft, confirm, send, and log the outcome.' },
+          { title: 'Routing', text: 'Voice-first messaging works well here once your execution layer is live.' }
+        ]
+      },
+      {
+        id: 'athena',
+        name: 'Athena',
+        badge: 'Strategy',
+        role: 'Planning & judgment',
+        desc: 'Decision framing, planning, schedules, strategic tradeoffs, structured thinking.',
+        theme: 'theme-strategy',
+        workspace: 'Strategy',
+        header: 'War room',
+        description: 'Use Athena for plans, sequencing, priorities, and deliberate decisions.',
+        panels: [
+          { title: 'Decision board', text: 'Frame options, risks, and execution paths before acting.' },
+          { title: 'Rituals', text: 'Morning plans, weekly reviews, and business priorities can live here.' },
+          { title: 'Constraints', text: 'Tie strategy to cash, time, staff, and operational reality.' },
+          { title: 'Outputs', text: 'Generate clear next actions instead of vague inspiration.' }
+        ]
+      },
+      {
+        id: 'hephaestus',
+        name: 'Hephaestus',
+        badge: 'Build',
+        role: 'Builder & systems forge',
+        desc: 'Code, infrastructure, automations, specs, implementation, iteration.',
+        theme: 'theme-builder',
+        workspace: 'Forge',
+        header: 'Systems forge',
+        description: 'Build flows, schemas, tools, and technical systems inside a focused maker workspace.',
+        panels: [
+          { title: 'Specs', text: 'Turn goals into tool contracts, schemas, and implementation tasks.' },
+          { title: 'Automations', text: 'Map workflows across webhooks, queues, and external systems.' },
+          { title: 'Deploy path', text: 'Good place for Netlify, Supabase, or API execution planning.' },
+          { title: 'Debug stream', text: 'Inspect logs, failures, and patch plans without cluttering other houses.' }
+        ]
+      }
+    ];
+
+    const THREADS = [
+      { title: 'Morning command ritual', preview: 'Wake phrase → Zeus → Hermes follow-up + task creation' },
+      { title: 'Hiro report review', preview: 'Open Hades and inspect archive anomalies and summaries' },
+      { title: 'Olympus deployment notes', preview: 'Netlify shell + server-side tool execution roadmap' }
+    ];
+
+    const STATE = {
+      currentAgent: 'zeus',
+      listening: false,
+      recognition: null,
+      messages: [
+        {
+          role: 'assistant',
+          agent: 'zeus',
+          text: 'Pegasus shell is live. Choose a god from the sidebar, or speak directly and I\'ll route the command.',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ],
+      memory: [
+        { title: 'Wake phrase', text: 'You plan to trigger Pegasus through Shortcuts instead of launching chat manually.' },
+        { title: 'Hosting target', text: 'OlympusHub-Pegasus on Netlify.' },
+        { title: 'Product idea', text: 'Each god is a themed mini-system inside one shared shell.' }
+      ],
+      status: [
+        { title: 'Frontend shell', text: 'Ready for local demo and Netlify hosting.' },
+        { title: 'Voice capture', text: 'Uses browser speech recognition where supported.' },
+        { title: 'Olympus execution', text: 'Stubbed in mock mode until your backend is connected.' }
+      ],
+      lastToolCall: null
+    };
+
+    const els = {
+      appRoot: document.getElementById('appRoot'),
+      agentList: document.getElementById('agentList'),
+      threadList: document.getElementById('threadList'),
+      headerEyebrow: document.getElementById('headerEyebrow'),
+      headerTitle: document.getElementById('headerTitle'),
+      headerDescription: document.getElementById('headerDescription'),
+      workspaceChip: document.getElementById('workspaceChip'),
+      modeChip: document.getElementById('modeChip'),
+      workspaceGrid: document.getElementById('workspaceGrid'),
+      chatStream: document.getElementById('chatStream'),
+      statusList: document.getElementById('statusList'),
+      memoryList: document.getElementById('memoryList'),
+      toolPayload: document.getElementById('toolPayload'),
+      promptInput: document.getElementById('promptInput'),
+      sendBtn: document.getElementById('sendBtn'),
+      micBtn: document.getElementById('micBtn'),
+      newThreadBtn: document.getElementById('newThreadBtn'),
+      themeBtn: document.getElementById('themeBtn')
+    };
+
+    function currentAgent() {
+      return AGENTS.find(a => a.id === STATE.currentAgent) || AGENTS[0];
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>\"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '\"': '&quot;',
+        "'": '&#39;'
+      }[char]));
+    }
+
+    function renderAgents() {
+      els.agentList.innerHTML = AGENTS.map(agent => `
+        <button class="agent-item ${agent.id === STATE.currentAgent ? 'active' : ''}" data-agent="${agent.id}">
+          <div class="agent-top">
+            <div class="agent-name">${agent.name}</div>
+            <span class="badge">${agent.badge}</span>
+          </div>
+          <div class="agent-desc">${agent.desc}</div>
+        </button>
+      `).join('');
+    }
+
+    function renderThreads() {
+      els.threadList.innerHTML = THREADS.map(thread => `
+        <button class="thread-item">
+          <div class="thread-top">
+            <div class="thread-title">${thread.title}</div>
+          </div>
+          <div class="thread-preview">${thread.preview}</div>
+        </button>
+      `).join('');
+    }
+
+    function renderHeader() {
+      const agent = currentAgent();
+      els.headerEyebrow.textContent = agent.header;
+      els.headerTitle.textContent = agent.name;
+      els.headerDescription.textContent = agent.description;
+      els.workspaceChip.textContent = `Workspace: ${agent.workspace}`;
+      els.modeChip.textContent = CONFIG.mockMode ? 'Mock Mode' : 'Live Olympus';
+      els.appRoot.className = `app ${agent.theme}`.trim();
+    }
+
+    function renderWorkspace() {
+      const agent = currentAgent();
+      els.workspaceGrid.innerHTML = agent.panels.map(panel => `
+        <div class="workspace-card">
+          <h3>${panel.title}</h3>
+          <p>${panel.text}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderChat() {
+      els.chatStream.innerHTML = STATE.messages.map(msg => {
+        const isUser = msg.role === 'user';
+        const agent = AGENTS.find(a => a.id === msg.agent) || currentAgent();
+        return `
+          <div class="message ${isUser ? 'user' : 'assistant'}">
+            ${isUser ? '' : `<div class="avatar">${agent.name[0]}</div>`}
+            <div class="bubble">${escapeHtml(msg.text)}<span class="meta">${isUser ? 'You' : agent.name} · ${msg.time}</span></div>
+          </div>
+        `;
+      }).join('');
+      els.chatStream.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
+    function renderUtility() {
+      els.statusList.innerHTML = STATE.status.map(item => `
+        <div class="list-item"><strong>${item.title}</strong><span>${item.text}</span></div>
+      `).join('');
+      els.memoryList.innerHTML = STATE.memory.map(item => `
+        <div class="list-item"><strong>${item.title}</strong><span>${item.text}</span></div>
+      `).join('');
+      els.toolPayload.textContent = STATE.lastToolCall
+        ? JSON.stringify(STATE.lastToolCall, null, 2)
+        : 'Awaiting command…';
+    }
+
+    function renderAll() {
+      renderAgents();
+      renderThreads();
+      renderHeader();
+      renderWorkspace();
+      renderChat();
+      renderUtility();
+    }
+
+    function pushMessage(role, text, agentId = STATE.currentAgent) {
+      STATE.messages.push({
+        role,
+        text,
+        agent: agentId,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+      renderChat();
+    }
+
+    function inferToolCall(text) {
+      const lower = text.toLowerCase();
+      if (lower.includes('email') || lower.includes('send')) {
+        return {
+          tool: 'send_email',
+          args: {
+            to: 'contact@example.com',
+            subject: 'Draft from Pegasus',
+            body: text
+          }
+        };
+      }
+      if (lower.includes('report') || STATE.currentAgent === 'hades') {
+        return {
+          tool: 'load_report',
+          args: {
+            report_id: 'hiro-report',
+            view: 'underworld_dashboard',
+            query: text
+          }
+        };
+      }
+      if (lower.includes('task') || lower.includes('tomorrow') || lower.includes('remind')) {
+        return {
+          tool: 'create_task',
+          args: {
+            title: text,
+            due_hint: 'tomorrow',
+            source: 'pegasus_shell'
+          }
+        };
+      }
+      return {
+        tool: 'route_command',
+        args: {
+          agent: STATE.currentAgent,
+          input: text
+        }
+      };
+    }
+
+    async function executeCommand(text) {
+      const toolCall = inferToolCall(text);
+      STATE.lastToolCall = toolCall;
+      renderUtility();
+
+      if (CONFIG.mockMode) {
+        const agent = currentAgent();
+        let reply = `${agent.name} received your command and prepared Olympus execution.`;
+        if (toolCall.tool === 'send_email') reply = 'Hermes would draft and route that email through Olympus after confirmation.';
+        if (toolCall.tool === 'load_report') reply = 'Hades is loading the Hiro Report workspace and surfacing archived signals.';
+        if (toolCall.tool === 'create_task') reply = 'Athena would convert that into a scheduled action with context and follow-up.';
+        pushMessage('assistant', reply, STATE.currentAgent);
+        return;
+      }
+
+      try {
+        const response = await fetch(CONFIG.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: text,
+            agent: STATE.currentAgent,
+            workspace: currentAgent().workspace,
+            source: 'pegasus_webapp'
+          })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data.tool_call) STATE.lastToolCall = data.tool_call;
+        pushMessage('assistant', data.message || 'Olympus completed the request.', STATE.currentAgent);
+        renderUtility();
+      } catch (error) {
+        pushMessage('assistant', `Olympus connection failed: ${error.message}`, STATE.currentAgent);
+      }
+    }
+
+    function handleSend() {
+      const text = els.promptInput.value.trim();
+      if (!text) return;
+      pushMessage('user', text);
+      els.promptInput.value = '';
+      executeCommand(text);
+    }
+
+    function initMic() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        pushMessage('assistant', 'Speech recognition is not supported in this browser. Type commands instead.', STATE.currentAgent);
+        return;
+      }
+
+      STATE.recognition = new SpeechRecognition();
+      STATE.recognition.lang = 'en-US';
+      STATE.recognition.interimResults = false;
+      STATE.recognition.maxAlternatives = 1;
+
+      STATE.recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        els.promptInput.value = transcript;
+        handleSend();
+      };
+
+      STATE.recognition.onend = () => {
+        STATE.listening = false;
+        els.micBtn.classList.remove('active');
+      };
+
+      STATE.recognition.onerror = (event) => {
+        pushMessage('assistant', `Mic error: ${event.error}`, STATE.currentAgent);
+        STATE.listening = false;
+        els.micBtn.classList.remove('active');
+      };
+    }
+
+    function toggleMic() {
+      if (!STATE.recognition) initMic();
+      if (!STATE.recognition) return;
+
+      STATE.listening = !STATE.listening;
+      if (STATE.listening) {
+        STATE.recognition.start();
+        els.micBtn.classList.add('active');
+      } else {
+        STATE.recognition.stop();
+        els.micBtn.classList.remove('active');
+      }
+    }
+
+    els.agentList.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-agent]');
+      if (!button) return;
+      STATE.currentAgent = button.dataset.agent;
+      renderAll();
+      pushMessage('assistant', `${currentAgent().name} workspace loaded.`, STATE.currentAgent);
+    });
+
+    els.sendBtn.addEventListener('click', handleSend);
+    els.promptInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        handleSend();
+      }
+    });
+    els.micBtn.addEventListener('click', toggleMic);
+    els.newThreadBtn.addEventListener('click', () => {
+      STATE.messages = [{
+        role: 'assistant',
+        agent: STATE.currentAgent,
+        text: `${currentAgent().name} is ready for a new thread.`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }];
+      renderChat();
+    });
+    els.themeBtn.addEventListener('click', () => {
+      const index = AGENTS.findIndex(a => a.id === STATE.currentAgent);
+      STATE.currentAgent = AGENTS[(index + 1) % AGENTS.length].id;
+      renderAll();
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>
