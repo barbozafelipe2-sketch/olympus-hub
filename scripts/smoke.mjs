@@ -27,7 +27,8 @@ for (const path of [
   "src/lib/projectFiles.ts",
   "src/components/ProjectWorkspace.tsx",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
-  "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql"
+  "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
+  "supabase/migrations/20261001153000_durable_execution_traces.sql"
 ]) {
   assert(existsSync(resolve(path)), path + " is missing");
 }
@@ -37,16 +38,20 @@ const projectWorkspace = readFileSync(
   "utf8"
 );
 assert(
-  projectWorkspace.includes("buildMemoryContext") &&
-    projectWorkspace.includes("uploadProjectFiles"),
-  "Project workspace is not wired to memory/files"
+  projectWorkspace.includes("addProjectMemory") &&
+    projectWorkspace.includes("uploadProjectFiles") &&
+    projectWorkspace.includes("projectId: project.id") &&
+    projectWorkspace.includes("conversationId"),
+  "Project workspace is not wired to memory/files/canonical context"
 );
 
 const chatApi = readFileSync(resolve("api/chat.js"), "utf8");
 assert(
   chatApi.includes("Project memory is user-approved context") &&
-    chatApi.includes("Never claim to have read a stored file"),
-  "Chat API is missing memory/file grounding safeguards"
+    chatApi.includes("Never claim to have read a stored file") &&
+    chatApi.includes("loadCanonicalProjectContext") &&
+    chatApi.includes('from("executions")'),
+  "Chat API is missing canonical context or durable execution safeguards"
 );
 
 for (const path of ["api/lib/providers.js", "api/lib/orchestrator.js"]) {
