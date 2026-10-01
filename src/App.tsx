@@ -45,6 +45,8 @@ type RunMeta = {
   multiProvider: boolean;
   degraded: boolean;
   route: string;
+  totalTokens: number;
+  usageRecorded: boolean;
 } | null;
 
 const initialMessages: ChatMessage[] = [
@@ -226,7 +228,9 @@ export default function App() {
         calls: result.orchestration.calls,
         multiProvider: result.orchestration.multiProvider,
         degraded: result.orchestration.degraded,
-        route: [...new Set(result.trace.map((entry) => entry.provider))].join(" → ")
+        route: [...new Set(result.trace.map((entry) => entry.provider))].join(" → "),
+        totalTokens: result.usage.totalTokens,
+        usageRecorded: result.usageRecorded
       });
     } catch (err) {
       const message =
@@ -588,6 +592,14 @@ export default function App() {
                     <div>
                       <dt>Degraded</dt>
                       <dd>{runMeta.degraded ? "Yes" : "No"}</dd>
+                    </div>
+                    <div>
+                      <dt>Tokens</dt>
+                      <dd>{runMeta.totalTokens.toLocaleString()}</dd>
+                    </div>
+                    <div>
+                      <dt>Ledger</dt>
+                      <dd>{runMeta.usageRecorded ? "Stored" : "Not stored"}</dd>
                     </div>
                     <div>
                       <dt>Execution</dt>
