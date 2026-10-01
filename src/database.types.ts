@@ -52,6 +52,78 @@ export type Database = {
           },
         ]
       }
+      executions: {
+        Row: {
+          call_count: number
+          conversation_id: string | null
+          created_at: string
+          degraded: boolean
+          fallback_used: boolean
+          id: string
+          latency_ms: number
+          mode: string
+          model: string
+          multi_provider: boolean
+          owner_id: string
+          project_id: string | null
+          provider: string
+          request_id: string
+          status: string
+          trace: Json
+        }
+        Insert: {
+          call_count: number
+          conversation_id?: string | null
+          created_at?: string
+          degraded?: boolean
+          fallback_used?: boolean
+          id?: string
+          latency_ms: number
+          mode: string
+          model: string
+          multi_provider?: boolean
+          owner_id: string
+          project_id?: string | null
+          provider: string
+          request_id: string
+          status?: string
+          trace?: Json
+        }
+        Update: {
+          call_count?: number
+          conversation_id?: string | null
+          created_at?: string
+          degraded?: boolean
+          fallback_used?: boolean
+          id?: string
+          latency_ms?: number
+          mode?: string
+          model?: string
+          multi_provider?: boolean
+          owner_id?: string
+          project_id?: string | null
+          provider?: string
+          request_id?: string
+          status?: string
+          trace?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "executions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
