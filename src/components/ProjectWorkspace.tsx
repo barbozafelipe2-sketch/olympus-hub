@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteArtifact,
+  downloadArtifact,
+  listProjectArtifacts,
+  type ArtifactRow
+} from "../lib/artifacts";
+import {
   getOrCreateProjectConversation,
   loadConversationMessages,
   persistMessage,
@@ -103,6 +109,7 @@ export function ProjectWorkspace({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [projectFiles, setProjectFiles] = useState<ProjectFileRow[]>([]);
+  const [artifacts, setArtifacts] = useState<ArtifactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [memoryDraft, setMemoryDraft] = useState("");
@@ -129,6 +136,7 @@ export function ProjectWorkspace({
     setMessages([]);
     setMemories([]);
     setProjectFiles([]);
+    setArtifacts([]);
 
     void Promise.all([
       getOrCreateProjectConversation({
@@ -138,9 +146,10 @@ export function ProjectWorkspace({
         mode: "zeus"
       }),
       listProjectMemories(project.id),
-      listProjectFiles(project.id)
+      listProjectFiles(project.id),
+      listProjectArtifacts(project.id)
     ])
-      .then(async ([conversation, savedMemories, savedFiles]) => {
+      .then(async ([conversation, savedMemories, savedFiles, savedArtifacts]) => {
         const savedMessages = await loadConversationMessages(conversation.id);
         if (!active) return;
 
@@ -151,6 +160,7 @@ export function ProjectWorkspace({
         );
         setMemories(sortMemories(savedMemories));
         setProjectFiles(savedFiles);
+        setArtifacts(savedArtifacts);
       })
       .catch((caught) => {
         if (!active) return;
@@ -282,6 +292,29 @@ export function ProjectWorkspace({
     }
   }
 
+  async function downloadProjectArtifact(artifact: ArtifactRow) {
+    setError(null);
+    try {
+      await downloadArtifact(artifact);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to download artifact."
+      );
+    }
+  }
+
+  async function removeArtifact(artifactId: string) {
+    setError(null);
+    try {
+      await deleteArtifact(artifactId);
+      setArtifacts((current) => current.filter((item) => item.id !== artifactId));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to delete artifact."
+      );
+    }
+  }
+
   async function generateAssistant(nextMessages: ChatMessage[]) {
     if (!conversationId || isSending) return;
 
@@ -325,6 +358,13 @@ export function ProjectWorkspace({
       });
 
       setMessages((current) => [...current, assistant]);
+      if (result.artifact) {
+        const refreshedArtifacts = await listProjectArtifacts(project.id).catch(
+          () => null
+        );
+        if (refreshedArtifacts) setArtifacts(refreshedArtifacts);
+      }
+
       setRunMeta({
         provider: result.provider,
         model: result.model,
@@ -658,8 +698,55 @@ export function ProjectWorkspace({
               )}
             </div>
             <p className="rail-footnote">
-              Files are stored privately. Current AI context receives metadata only;
-              content reading will be enabled through the capability layer.
+              Private text, Markdown, CSV and JSON files can be read by the Capability
+              Broker when you ask for them. Other file types remain metadata-only.
+            </p>
+          </section>
+
+          <section className="rail-card">
+            <div className="rail-heading rail-heading-split">
+              <span>
+                <FileText size={17} />
+                <strong>Artifacts</strong>
+              </span>
+              <small>{artifacts.length}</small>
+            </div>
+            <div className="rail-list">
+              {artifacts.length === 0 ? (
+                <div className="empty-rail">
+                  Ask OlyHub to create a document, report, plan, code file or other
+                  explicit deliverable inside this Project.
+                </div>
+              ) : (
+                artifacts.slice(0, 10).map((artifact) => (
+                  <div className="rail-list-item file-row" key={artifact.id}>
+                    <div>
+                      <p>{artifact.title}</p>
+                      <small>
+                        {artifact.kind} · v{artifact.current_version}
+                      </small>
+                    </div>
+                    <span className="row-actions">
+                      <button
+                        aria-label={"Download " + artifact.title}
+                        onClick={() => void downloadProjectArtifact(artifact)}
+                      >
+                        <Download size={13} />
+                      </button>
+                      <button
+                        aria-label={"Delete " + artifact.title}
+                        onClick={() => void removeArtifact(artifact.id)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <p className="rail-footnote">
+              Explicit deliverables are persisted as versioned artifacts. Asking to
+              revise the latest artifact creates a new immutable version.
             </p>
           </section>
 
