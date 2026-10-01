@@ -28,6 +28,14 @@ function sourcesFromMetadata(metadata: Json): ApiSource[] {
             typeof source.url === "string"
         )
     )
+    .filter((source) => {
+      try {
+        const parsed = new URL(source.url);
+        return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+        return false;
+      }
+    })
     .map((source) => ({
       title: source.title.slice(0, 300),
       url: source.url
