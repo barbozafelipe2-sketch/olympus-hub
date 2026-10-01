@@ -336,9 +336,9 @@ export function ProjectWorkspace({
             projectId: project.id,
             conversationId
           },
-          messages: nextMessages.filter(
-            (message) => !message.id.startsWith("project-welcome-")
-          )
+          messages: nextMessages
+            .filter((message) => !message.id.startsWith("project-welcome-"))
+            .slice(-24)
         },
         controller.signal
       );
