@@ -16,6 +16,7 @@ import {
   Trash2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MessageSources } from "./MessageSources";
 import {
   deleteArtifact,
   downloadArtifact,
@@ -481,7 +482,8 @@ export function ProjectWorkspace({
           model: result.model,
           fallback_used: result.fallbackUsed,
           orchestration: result.orchestration,
-          trace: result.trace
+          trace: result.trace,
+          sources: result.sources
         }
       });
 
@@ -628,7 +630,10 @@ export function ProjectWorkspace({
                   {message.role === "assistant" && (
                     <div className="message-avatar">Z</div>
                   )}
-                  <div className="message-bubble">{message.content}</div>
+                  <div className="message-bubble">
+                    <div>{message.content}</div>
+                    <MessageSources sources={message.sources} />
+                  </div>
                 </article>
               ))
             )}
