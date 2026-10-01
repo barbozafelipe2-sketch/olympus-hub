@@ -21,6 +21,7 @@ const ProjectContextSchema = z.object({
 const BodySchema = z.object({
   mode: ModeSchema.default("zeus"),
   projectContext: ProjectContextSchema.optional(),
+  conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1).max(80)
 });
 
@@ -158,6 +159,46 @@ async function loadCanonicalProjectContext(client, identifiers) {
       })),
     messageCount: messageCountResult.count ?? 0,
     checkpoint: checkpointResult.data ?? null
+  };
+}
+
+async function loadCanonicalHomeConversation(client, conversationId) {
+  if (!conversationId) return null;
+
+  const { data: conversation, error: conversationError } = await client
+    .from("conversations")
+    .select("id, project_id, title, mode")
+    .eq("id", conversationId)
+    .single();
+
+  if (
+    conversationError ||
+    !conversation ||
+    conversation.project_id !== null
+  ) {
+    throw Object.assign(new Error("Home conversation is not available."), {
+      code: "HOME_CONVERSATION_DENIED"
+    });
+  }
+
+  const { data: recent, error: recentError } = await client
+    .from("messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversation.id)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (recentError) throw recentError;
+
+  return {
+    project: null,
+    conversation,
+    recentMessages: [...(recent ?? [])]
+      .reverse()
+      .map((message) => ({
+        role: message.role === "assistant" ? "assistant" : "user",
+        content: message.content
+      }))
   };
 }
 
@@ -461,9 +502,10 @@ export default async function handler(req, res) {
     });
   }
 
-  const { mode, messages, projectContext } = parsed.data;
+  const { mode, messages, projectContext, conversationId } = parsed.data;
 
   let canonicalContext = null;
+  let homeContext = null;
   try {
     canonicalContext = await loadCanonicalProjectContext(
       auth.client,
@@ -484,6 +526,30 @@ export default async function handler(req, res) {
         ? "Project context is unavailable for this account."
         : "OlyHub could not load project context."
     });
+  }
+
+  if (!canonicalContext && conversationId) {
+    try {
+      homeContext = await loadCanonicalHomeConversation(
+        auth.client,
+        conversationId
+      );
+    } catch (error) {
+      const denied =
+        error instanceof Error && error.code === "HOME_CONVERSATION_DENIED";
+
+      console.error("OlyHub Home conversation failure", {
+        userId: auth.user.id,
+        denied,
+        code: error?.code
+      });
+
+      return res.status(denied ? 403 : 500).json({
+        error: denied
+          ? "Home conversation is unavailable for this account."
+          : "OlyHub could not load Home conversation."
+      });
+    }
   }
 
   let quota;
@@ -525,9 +591,12 @@ export default async function handler(req, res) {
     }
   }
 
+  const executionContext = canonicalContext || homeContext;
   const effectiveMessages = canonicalContext?.recentMessages?.length
     ? canonicalContext.recentMessages
-    : messages.slice(-40);
+    : homeContext?.recentMessages?.length
+      ? homeContext.recentMessages
+      : messages.slice(-40);
 
   const startedAt = Date.now();
   const fileCapability = canonicalContext
@@ -548,7 +617,7 @@ export default async function handler(req, res) {
 
     const artifactCapability = await persistRequestedArtifact({
       client: auth.client,
-      context: canonicalContext,
+      context: executionContext,
       messages: effectiveMessages,
       result
     });
@@ -568,7 +637,7 @@ export default async function handler(req, res) {
     const executionId = await recordExecution(auth.client, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
-      conversation_id: canonicalContext?.conversation.id ?? null,
+      conversation_id: executionContext?.conversation.id ?? null,
       mode,
       status: orchestration.degraded ? "degraded" : "completed",
       provider: result.provider,
@@ -612,7 +681,7 @@ export default async function handler(req, res) {
     await recordExecution(auth.client, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
-      conversation_id: canonicalContext?.conversation.id ?? null,
+      conversation_id: executionContext?.conversation.id ?? null,
       mode,
       status: "failed",
       provider: error?.provider || "unknown",
