@@ -1,5 +1,5 @@
 import type { Database, Json } from "../database.types";
-import type { ChatMessage, ModeId } from "../types";
+import type { ApiSource, ChatMessage, ModeId } from "../types";
 import { requireSupabase } from "./supabase";
 
 export type ConversationRow =
@@ -7,6 +7,33 @@ export type ConversationRow =
 
 export type MessageRow =
   Database["public"]["Tables"]["messages"]["Row"];
+
+
+function sourcesFromMetadata(metadata: Json): ApiSource[] {
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") {
+    return [];
+  }
+
+  const value = metadata.sources;
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(
+      (source): source is { title: string; url: string } =>
+        Boolean(
+          source &&
+            !Array.isArray(source) &&
+            typeof source === "object" &&
+            typeof source.title === "string" &&
+            typeof source.url === "string"
+        )
+    )
+    .map((source) => ({
+      title: source.title.slice(0, 300),
+      url: source.url
+    }))
+    .slice(0, 12);
+}
 
 export async function getOrCreateProjectConversation(input: {
   ownerId: string;
@@ -70,7 +97,7 @@ export async function loadConversationMessages(
 ): Promise<ChatMessage[]> {
   const { data, error } = await requireSupabase()
     .from("messages")
-    .select("id, role, content, created_at")
+    .select("id, role, content, created_at, metadata")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
 
@@ -80,7 +107,8 @@ export async function loadConversationMessages(
     id: row.id,
     role: row.role === "assistant" ? "assistant" : "user",
     content: row.content,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    sources: sourcesFromMetadata(row.metadata)
   }));
 }
 
@@ -100,7 +128,7 @@ export async function persistMessage(input: {
       content: input.content,
       metadata: input.metadata ?? {}
     })
-    .select("id, role, content, created_at")
+    .select("id, role, content, created_at, metadata")
     .single();
 
   if (error) throw error;
@@ -109,7 +137,8 @@ export async function persistMessage(input: {
     id: data.id,
     role: data.role === "assistant" ? "assistant" : "user",
     content: data.content,
-    createdAt: data.created_at
+    createdAt: data.created_at,
+    sources: sourcesFromMetadata(data.metadata)
   };
 }
 
