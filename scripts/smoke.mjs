@@ -26,12 +26,20 @@ for (const path of [
   "src/lib/memory.ts",
   "src/lib/projectFiles.ts",
   "src/lib/artifacts.ts",
+  "src/lib/account.ts",
+  "src/lib/settings.ts",
   "src/components/ProjectWorkspace.tsx",
+  "src/components/SettingsView.tsx",
+  "src/components/Onboarding.tsx",
+  "api/account.js",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
   "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
   "supabase/migrations/20261001152742_durable_execution_traces.sql",
   "supabase/migrations/20261001153147_artifact_engine_foundation.sql",
   "supabase/migrations/20261001153233_index_artifacts_conversation.sql",
+  "supabase/migrations/20261001154043_usage_ledger_and_account_limits.sql",
+  "supabase/migrations/20261001154212_usage_quota_summary_rpc.sql",
+  "supabase/migrations/20261001173347_profile_onboarding_state.sql",
   "api/lib/capabilities.js"
 ]) {
   assert(existsSync(resolve(path)), path + " is missing");
@@ -80,3 +88,20 @@ assert(
 );
 
 console.log("OlyHub smoke: PASS");
+
+
+const appSource = readFileSync(resolve("src/App.tsx"), "utf8");
+assert(
+  appSource.includes("<SettingsView") &&
+    appSource.includes("<Onboarding") &&
+    !appSource.includes("File transport is not enabled"),
+  "Commercial Settings/onboarding or honest Home capability boundary regressed"
+);
+
+const accountApi = readFileSync(resolve("api/account.js"), "utf8");
+assert(
+  accountApi.includes("SUPABASE_SECRET_KEY") &&
+    accountApi.includes("deleteUser") &&
+    accountApi.includes('from("project-files").remove'),
+  "Account deletion is not wired to private Storage cleanup + Auth deletion"
+);
