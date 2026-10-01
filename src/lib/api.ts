@@ -57,6 +57,7 @@ export async function sendChat(
     !("executionId" in data) ||
     !("artifact" in data) ||
     !Array.isArray(data.capabilities) ||
+    !Array.isArray(data.sources) ||
     !data.usage ||
     !data.quota ||
     typeof data.usageRecorded !== "boolean"
