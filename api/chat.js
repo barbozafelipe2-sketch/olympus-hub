@@ -8,8 +8,14 @@ const MessageSchema = z.object({
   content: z.string().min(1).max(30000)
 });
 
+const ProjectContextSchema = z.object({
+  name: z.string().min(1).max(120),
+  goal: z.string().max(5000)
+});
+
 const BodySchema = z.object({
   mode: ModeSchema.default("zeus"),
+  projectContext: ProjectContextSchema.optional(),
   messages: z.array(MessageSchema).min(1).max(80)
 });
 
@@ -106,7 +112,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const { mode, messages } = parsed.data;
+  const { mode, messages, projectContext } = parsed.data;
   const model =
     process.env.OPENAI_DEFAULT_MODEL ||
     process.env.OPENAI_FALLBACK_MODEL ||
@@ -124,7 +130,15 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        instructions: MODE_INSTRUCTIONS[mode],
+        instructions:
+          MODE_INSTRUCTIONS[mode] +
+          (projectContext
+            ? "\n\nActive OlyHub project context:\nProject: " +
+              projectContext.name +
+              "\nGoal: " +
+              (projectContext.goal || "No explicit goal set.") +
+              "\nKeep the response aligned with this project context unless the user explicitly changes scope."
+            : ""),
         input: messages.map((message) => ({
           role: message.role,
           content: message.content
