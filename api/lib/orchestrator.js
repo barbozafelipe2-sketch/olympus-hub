@@ -28,8 +28,34 @@ function traceEntry(result, role, fallbackFrom = null) {
     providerId: result.providerId,
     model: result.model,
     requestId: result.requestId,
-    fallbackFrom
+    fallbackFrom,
+    usage: result.usage
   };
+}
+
+function aggregateUsage(trace) {
+  return trace.reduce(
+    (total, entry) => {
+      const usage = entry.usage || {};
+      total.inputTokens += usage.inputTokens || 0;
+      total.outputTokens += usage.outputTokens || 0;
+      total.cachedInputTokens += usage.cachedInputTokens || 0;
+      total.cacheWriteTokens += usage.cacheWriteTokens || 0;
+      total.reasoningTokens += usage.reasoningTokens || 0;
+      total.toolTokens += usage.toolTokens || 0;
+      total.totalTokens += usage.totalTokens || 0;
+      return total;
+    },
+    {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      toolTokens: 0,
+      totalTokens: 0
+    }
+  );
 }
 
 async function withOpenAIFallback(provider, args, role) {
@@ -141,6 +167,7 @@ async function executeDirect(mode, systemContext, messages) {
     requestId: call.result.requestId,
     fallbackUsed: call.fallbackUsed,
     trace: call.trace,
+    usage: aggregateUsage(call.trace),
     orchestration: {
       mode,
       calls: call.trace.length,
@@ -177,6 +204,7 @@ async function executeZeus(systemContext, messages) {
       requestId: leadCall.result.requestId,
       fallbackUsed,
       trace,
+      usage: aggregateUsage(trace),
       orchestration: {
         mode: "zeus",
         calls: trace.length,
@@ -236,6 +264,7 @@ async function executeZeus(systemContext, messages) {
       requestId: integrated.requestId,
       fallbackUsed,
       trace,
+      usage: aggregateUsage(trace),
       orchestration: {
         mode: "zeus",
         calls: trace.length,
@@ -251,6 +280,7 @@ async function executeZeus(systemContext, messages) {
       requestId: leadCall.result.requestId,
       fallbackUsed,
       trace,
+      usage: aggregateUsage(trace),
       orchestration: {
         mode: "zeus",
         calls: trace.length,
@@ -361,6 +391,7 @@ async function executeOlympus(systemContext, messages) {
     requestId: director.requestId,
     fallbackUsed,
     trace,
+    usage: aggregateUsage(trace),
     orchestration: {
       mode: "olympus",
       calls: trace.length,
