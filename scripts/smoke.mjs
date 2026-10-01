@@ -46,7 +46,10 @@ for (const path of [
   "supabase/migrations/20261001173347_profile_onboarding_state.sql",
   "supabase/migrations/20261001174355_conversation_checkpoints.sql",
   "api/health.js",
-  "api/lib/capabilities.js"
+  "api/lib/capabilities.js",
+  "src/components/MessageSources.tsx",
+  "scripts/e2e-isolation.mjs",
+  ".github/workflows/e2e-staging.yml"
 ]) {
   assert(existsSync(resolve(path)), path + " is missing");
 }
@@ -82,6 +85,8 @@ for (const path of ["api/lib/providers.js", "api/lib/orchestrator.js"]) {
 const capabilities = readFileSync(resolve("api/lib/capabilities.js"), "utf8");
 assert(
   capabilities.includes("readRequestedProjectFiles") &&
+    capabilities.includes("runWebSearchCapability") &&
+    capabilities.includes('"web_search"') &&
     capabilities.includes("persistRequestedArtifact") &&
     capabilities.includes("create_artifact_with_version"),
   "Capability Broker / Artifact Engine is not wired"
@@ -166,6 +171,40 @@ assert(
   chatApi.includes('from("project_tasks")') &&
     chatApi.includes("Project tasks (current durable work state)"),
   "Project tasks are not grounded in server-side AI context"
+);
+
+
+assert(
+  chatApi.includes("runWebSearchCapability") &&
+    chatApi.includes("sources: webCapability.sources") &&
+    chatApi.includes("combineUsage"),
+  "Web search is not integrated into orchestration/usage response"
+);
+
+const messageSources = readFileSync(
+  resolve("src/components/MessageSources.tsx"),
+  "utf8"
+);
+const conversations = readFileSync(
+  resolve("src/lib/conversations.ts"),
+  "utf8"
+);
+assert(
+  messageSources.includes('target="_blank"') &&
+    messageSources.includes("source.url") &&
+    conversations.includes("sourcesFromMetadata") &&
+    conversations.includes('parsed.protocol === "https:"'),
+  "Persistent clickable citation rendering is incomplete"
+);
+
+const e2eIsolation = readFileSync(
+  resolve("scripts/e2e-isolation.mjs"),
+  "utf8"
+);
+assert(
+  e2eIsolation.includes("RLS isolation failed") &&
+    e2eIsolation.includes('from("projects").delete()'),
+  "Two-user RLS isolation E2E harness is incomplete"
 );
 
 console.log("OlyHub smoke: PASS");
