@@ -62,3 +62,25 @@ export async function completeOnboarding(): Promise<void> {
   const { error } = await requireSupabase().rpc("complete_my_onboarding");
   if (error) throw error;
 }
+
+
+export async function getOnboardingState(): Promise<boolean> {
+  const client = requireSupabase();
+  const {
+    data: { user },
+    error: userError
+  } = await client.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error("Your OlyHub session is no longer valid.");
+  }
+
+  const { data, error } = await client
+    .from("profiles")
+    .select("onboarding_completed")
+    .eq("id", user.id)
+    .single();
+
+  if (error) throw error;
+  return data.onboarding_completed;
+}
