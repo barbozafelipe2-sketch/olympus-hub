@@ -136,7 +136,7 @@ Reference:
 ### 10. Runtime release validation
 
 Required before submission:
-- two-user account-isolation E2E suite
+- run the existing two-user account-isolation E2E harness against staging
 - signup/signin/signout/delete-account E2E
 - Home persistence E2E
 - Project persistence E2E
@@ -156,7 +156,7 @@ Required before submission:
 Foundation is installable and substantially functional.
 
 ### Public beta
-Close, but runtime E2E isolation, production legal URLs, final quotas/business model and production observability still need closure.
+Close. The two-user RLS isolation harness exists but still needs staging credentials and an executed passing run. Production legal URLs, final quotas/business model and production observability also need closure.
 
 ### Apple App Store
 Not ready yet. Native packaging/signing, privacy manifest, final legal metadata, business-model/IAP decision, store assets and native runtime testing remain mandatory release work.
