@@ -576,12 +576,8 @@ export default function App() {
 
         <button
           className="new-chat"
-          onClick={() => {
-            setMessages(initialMessages);
-            setRunMeta(null);
-            setError(null);
-            chooseView("home");
-          }}
+          disabled={homeChatBusy || isSending}
+          onClick={() => void newHomeChat()}
         >
           <Plus size={17} />
           New chat
@@ -610,6 +606,29 @@ export default function App() {
             Settings
           </button>
         </nav>
+
+        {homeConversations.length > 0 && (
+          <section className="recent-chats">
+            <span className="recent-chats-label">Recent</span>
+            <div className="recent-chats-list">
+              {homeConversations.slice(0, 6).map((conversation) => (
+                <button
+                  key={conversation.id}
+                  className={
+                    view === "home" &&
+                    activeHomeConversation?.id === conversation.id
+                      ? "recent-chat active"
+                      : "recent-chat"
+                  }
+                  onClick={() => void openHomeConversation(conversation)}
+                  title={conversation.title}
+                >
+                  <span>{conversation.title}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="sidebar-spacer" />
 
@@ -696,12 +715,14 @@ export default function App() {
             </div>
           </div>
 
-          {view !== "settings" && (
+          {view === "home" && (
             <label className="mode-select">
               <Sparkles size={16} />
               <select
                 value={mode}
-                onChange={(event) => setMode(event.target.value as ModeId)}
+                onChange={(event) =>
+                  void changeHomeMode(event.target.value as ModeId)
+                }
               >
                 {MODES.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -722,7 +743,9 @@ export default function App() {
                   <strong>{selectedMode.label}</strong>
                   <span>{selectedMode.description}</span>
                 </div>
-                <span className="status-dot">Authenticated</span>
+                <span className="status-dot">
+                  {homeLoading ? "Restoring" : "Persistent"}
+                </span>
               </div>
 
               <div className="chat-stream" aria-live="polite">
@@ -759,6 +782,7 @@ export default function App() {
                 <div className="composer home-composer">
                   <textarea
                     value={prompt}
+                    disabled={homeLoading}
                     onChange={(event) => setPrompt(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
@@ -771,7 +795,7 @@ export default function App() {
                   />
                   <button
                     className="send-button"
-                    disabled={!prompt.trim() || isSending}
+                    disabled={homeLoading || !prompt.trim() || isSending}
                     onClick={() => void submit()}
                     aria-label="Send message"
                   >
@@ -779,19 +803,51 @@ export default function App() {
                   </button>
                 </div>
                 <p className="composer-caption">
-                  AI can make mistakes. Use a Project for persistent files, memory and artifacts.
+                  Home chats and artifacts persist. Use a Project when work also needs files, memory and a durable goal.
                 </p>
               </div>
             </div>
 
             <aside className="context-rail">
               <section className="rail-card">
-                <div className="rail-heading">
-                  <Archive size={17} />
-                  <strong>Artifacts</strong>
+                <div className="rail-heading rail-heading-split">
+                  <span>
+                    <Archive size={17} />
+                    <strong>Artifacts</strong>
+                  </span>
+                  <small>{homeArtifacts.length}</small>
                 </div>
-                <div className="empty-rail">
-                  Files OlyHub creates for this chat will appear here.
+                <div className="rail-list">
+                  {homeArtifacts.length === 0 ? (
+                    <div className="empty-rail">
+                      Ask OlyHub to create a document, report, plan, code file or other explicit deliverable.
+                    </div>
+                  ) : (
+                    homeArtifacts.slice(0, 10).map((artifact) => (
+                      <div className="rail-list-item file-row" key={artifact.id}>
+                        <div>
+                          <p>{artifact.title}</p>
+                          <small>
+                            {artifact.kind} · v{artifact.current_version}
+                          </small>
+                        </div>
+                        <span className="row-actions">
+                          <button
+                            aria-label={"Download " + artifact.title}
+                            onClick={() => void downloadHomeArtifact(artifact)}
+                          >
+                            <Download size={13} />
+                          </button>
+                          <button
+                            aria-label={"Delete " + artifact.title}
+                            onClick={() => void removeHomeArtifact(artifact.id)}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </section>
 
