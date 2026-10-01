@@ -32,6 +32,9 @@ for (const path of [
   "src/components/SettingsView.tsx",
   "src/components/Onboarding.tsx",
   "api/account.js",
+  "public/manifest.webmanifest",
+  "public/icons/olyhub.svg",
+  "public/sw.js",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
   "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
   "supabase/migrations/20261001152742_durable_execution_traces.sql",
@@ -104,6 +107,29 @@ assert(
     accountApi.includes("deleteUser") &&
     accountApi.includes('from("project-files").remove'),
   "Account deletion is not wired to private Storage cleanup + Auth deletion"
+);
+
+console.log("OlyHub smoke: PASS");
+
+
+const mainSource = readFileSync(resolve("src/main.tsx"), "utf8");
+const serviceWorker = readFileSync(resolve("public/sw.js"), "utf8");
+const manifest = JSON.parse(
+  readFileSync(resolve("public/manifest.webmanifest"), "utf8")
+);
+
+assert(
+  mainSource.includes('serviceWorker.register("/sw.js")') &&
+    manifest.display === "standalone" &&
+    Array.isArray(manifest.icons) &&
+    manifest.icons.length > 0,
+  "PWA install foundation is incomplete"
+);
+
+assert(
+  serviceWorker.includes('url.pathname.startsWith("/api/")') &&
+    !serviceWorker.includes('cache.put("/api/'),
+  "Service worker must never cache authenticated API responses"
 );
 
 console.log("OlyHub smoke: PASS");
