@@ -1,6 +1,6 @@
 # OlyHub Commercial Architecture
 
-Status: Project continuity foundation
+Status: Project continuity + memory/files foundation
 Repository: `barbozafelipe2-sketch/olympus-hub`
 Active code line: `main`
 
@@ -45,11 +45,14 @@ Each Project currently has exactly one durable conversation. Opening a Project r
 
 Provider/model/request metadata is stored with assistant messages for future trace views.
 
-The next workspace layers are:
-- files
-- approved memory
-- artifacts
-- project tasks
+Implemented workspace layers:
+- persistent conversations
+- approved project memory
+- private project files
+
+Next layers:
+- artifact generation/versioning
+- project task execution
 - execution traces
 
 ## Identity and authorization
@@ -86,7 +89,13 @@ Persistent conversation messages. Assistant rows can store request/provider/mode
 ### project_tasks
 Project-scoped work items.
 
-All five tables have RLS enabled.
+### project_memories
+Explicit user-approved context. Per scope the database enforces 40 items, 15,000 total characters, deduplication, kind and importance ranking.
+
+### project_files
+Metadata for private Storage objects. Object paths are bound to user ID + Project ID and protected separately by Storage RLS.
+
+All exposed product tables have RLS enabled.
 
 ## Project chat lifecycle
 
@@ -162,9 +171,9 @@ Do not treat a responsive web build alone as App Store-ready.
 - Persistent Project conversations ✅
 - Locked dependency install + executable smoke ✅
 - Account deletion
-- Real file upload and secure object storage
+- Real file upload and secure object storage ✅
 - Artifact persistence/versioning
-- Memory policy and provenance
+- Memory policy and bounded approved context ✅
 - Long-history compaction/summarization
 - Provider adapter registry and health/fallback rules
 - Zeus and Olympus orchestration implemented and traceable
