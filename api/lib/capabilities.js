@@ -19,7 +19,15 @@ function normalize(value) {
 }
 
 function webSearchIntent(text) {
-  return /(search|research|look up|find online|web|internet|latest|current|today|tonight|this week|this month|news|recent|up to date|pesquise|pesquisar|procure|buscar|busque|internet|web|mais recente|atual|hoje|esta semana|este mês|not[ií]cias|recente)/i.test(
+  if (
+    /(search|research|look up|find online|web|internet|latest|today|tonight|this week|this month|news|recent|up to date|pesquise|pesquisar|procure|buscar|busque|internet|web|mais recente|hoje|esta semana|este mês|not[ií]cias|recente)/i.test(
+      text
+    )
+  ) {
+    return true;
+  }
+
+  return /(current|now|atual|agora).{0,50}(president|ceo|price|rate|version|release|law|rule|weather|score|schedule|status|presidente|preço|taxa|versão|lançamento|lei|regra|clima|placar|agenda)/i.test(
     text
   );
 }
@@ -89,6 +97,14 @@ function webSources(data) {
 
   const seen = new Set();
   return candidates.filter((source) => {
+    let parsed;
+    try {
+      parsed = new URL(source.url);
+    } catch {
+      return false;
+    }
+
+    if (!["http:", "https:"].includes(parsed.protocol)) return false;
     if (seen.has(source.url)) return false;
     seen.add(source.url);
     return true;
