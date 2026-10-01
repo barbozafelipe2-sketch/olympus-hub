@@ -148,6 +148,51 @@ export type Database = {
           },
         ]
       }
+      conversation_checkpoints: {
+        Row: {
+          content: string
+          conversation_id: string
+          covered_message_count: number
+          created_at: string
+          owner_id: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          covered_message_count?: number
+          created_at?: string
+          owner_id: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          covered_message_count?: number
+          created_at?: string
+          owner_id?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_checkpoints_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_checkpoints_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
