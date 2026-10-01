@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
+import { ProjectWorkspace } from "./components/ProjectWorkspace";
 import { useAuth } from "./hooks/useAuth";
 import { sendChat } from "./lib/api";
 import {
@@ -78,6 +79,7 @@ export default function App() {
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -99,6 +101,7 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setProjects([]);
+      setSelectedProject(null);
       return;
     }
 
@@ -245,6 +248,8 @@ export default function App() {
       });
 
       setProjects((current) => [project, ...current]);
+      setSelectedProject(project);
+      setView("projects");
       setProjectName("");
       setProjectGoal("");
       setProjectDialogOpen(false);
@@ -264,6 +269,9 @@ export default function App() {
       await archiveProject(projectId);
       setProjects((current) =>
         current.filter((project) => project.id !== projectId)
+      );
+      setSelectedProject((current) =>
+        current?.id === projectId ? null : current
       );
     } catch (caught) {
       setProjectError(
@@ -362,6 +370,28 @@ export default function App() {
       )}
 
       <main className="workspace">
+        {selectedProject ? (
+          <ProjectWorkspace
+            project={selectedProject}
+            ownerId={userId}
+            onBack={() => setSelectedProject(null)}
+            onProjectTouched={(projectId, updatedAt) => {
+              setProjects((current) =>
+                current.map((project) =>
+                  project.id === projectId
+                    ? { ...project, updated_at: updatedAt }
+                    : project
+                )
+              );
+              setSelectedProject((current) =>
+                current?.id === projectId
+                  ? { ...current, updated_at: updatedAt }
+                  : current
+              );
+            }}
+          />
+        ) : (
+          <>
         <header className="topbar">
           <div className="topbar-left">
             <button
@@ -591,14 +621,29 @@ export default function App() {
             ) : (
               <div className="project-grid">
                 {projects.map((project) => (
-                  <article className="project-card" key={project.id}>
+                  <article
+                    className="project-card project-card-clickable"
+                    key={project.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedProject(project)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedProject(project);
+                      }
+                    }}
+                  >
                     <div className="project-card-top">
                       <div className="project-icon">
                         <FolderKanban size={20} />
                       </div>
                       <button
                         className="project-archive"
-                        onClick={() => void removeProject(project.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void removeProject(project.id);
+                        }}
                         aria-label={"Archive " + project.name}
                         title="Archive project"
                       >
@@ -613,6 +658,8 @@ export default function App() {
               </div>
             )}
           </section>
+        )}
+          </>
         )}
       </main>
 
