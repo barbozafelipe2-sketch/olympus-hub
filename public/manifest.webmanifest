@@ -1,0 +1,20 @@
+{
+  "name": "OlyHub",
+  "short_name": "OlyHub",
+  "description": "A persistent AI workspace for projects, files, memory, artifacts and orchestrated model work.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080b",
+  "theme_color": "#08090d",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/olyhub.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
