@@ -195,10 +195,12 @@ export function ProjectWorkspace({
       setProjectFiles((current) => [...uploaded, ...current]);
 
       const touchedAt = new Date().toISOString();
-      await touchConversationAndProject({
-        conversationId: conversationId ?? "",
-        projectId: project.id
-      }).catch(() => undefined);
+      if (conversationId) {
+        await touchConversationAndProject({
+          conversationId,
+          projectId: project.id
+        }).catch(() => undefined);
+      }
       onProjectTouched(project.id, touchedAt);
     } catch (caught) {
       setError(
