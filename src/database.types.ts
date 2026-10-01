@@ -603,6 +603,14 @@ export type Database = {
           version_id: string
         }[]
       }
+      get_my_usage_summary: {
+        Args: never
+        Returns: {
+          daily_requests: number
+          daily_tokens: number
+          monthly_tokens: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
