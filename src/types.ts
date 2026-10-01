@@ -14,6 +14,7 @@ export type AttachmentDraft = {
   name: string;
   type: string;
   size: number;
+  file: File;
 };
 
 export type ApiChatResponse = {
@@ -32,12 +33,12 @@ export const MODES: Array<{
   {
     id: "zeus",
     label: "Zeus",
-    description: "Best single route with OpenAI fallback"
+    description: "Single OpenAI route in this stage"
   },
   {
     id: "olympus",
     label: "Olympus",
-    description: "Council workflow; degrades transparently when adapters are unavailable"
+    description: "Single OpenAI route in this stage; multi-model council is not enabled yet"
   },
   {
     id: "openai",
@@ -47,11 +48,11 @@ export const MODES: Array<{
   {
     id: "claude",
     label: "Claude",
-    description: "Direct Claude route with OpenAI fallback"
+    description: "OpenAI fallback until a Claude server adapter is configured"
   },
   {
     id: "google",
     label: "Google AI",
-    description: "Direct Google AI route with OpenAI fallback"
+    description: "OpenAI fallback until a Google server adapter is configured"
   }
 ];

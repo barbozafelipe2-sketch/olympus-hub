@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 - Persistent workspace slice
+
+### Added
+- Home conversations persist in Supabase and reopen from Recent chats.
+- Every Project has one canonical saved conversation, a working task list, and a Project chat route.
+- Supported text-like source files upload to a private Storage bucket, are attached to the AI request, and are retained in the conversation workspace.
+- Assistant answers can be saved as Markdown artifacts, reopened through short-lived signed links, and deleted.
+- RLS policies restrict artifact rows and Storage objects to the authenticated owner; project artifact rows must match the owning project.
+- Mode notices explain when Claude, Google AI, or Olympus requests use the single-model OpenAI foundation route.
+- Responsive layouts keep saved files and artifacts reachable on narrow screens.
+
+### Boundaries
+- Source uploads support TXT, MD, CSV, JSON, XML and HTML, up to 2 MB per file and 5 MB combined per request.
+- Conversation view loads up to 200 messages and sends the latest 80 in model context.
+- Claude/Google provider adapters, real Olympus council execution, PDF/Office/image parsing, rich document exports, web search, billing, account deletion and native App Store packaging remain future stages and are labeled accordingly.
+
 ## 0.2.0 - Supabase commercial foundation
 
 ### Added
@@ -22,12 +38,7 @@
 - User-editable metadata is not used for authorization.
 
 ### Known gaps
-- Project conversations are not yet wired into the UI.
-- File selection does not upload file bytes yet.
-- Artifacts are not generated/persisted yet.
-- Account deletion is not implemented yet.
-- Claude and Google adapters are not enabled yet.
-- Olympus is not yet a real multi-model council.
+- See the current 0.3.0 boundaries above.
 
 ## 0.1.0 - Commercial React foundation
 

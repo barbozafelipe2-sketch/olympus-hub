@@ -10,17 +10,21 @@ OlyHub is the commercial React product for customer distribution and eventual Ap
 - Supabase Auth
 - Per-user Row Level Security
 - Persistent Projects
+- Persistent Home chats and one durable chat per Project
+- Project task creation and status tracking
+- Private source-file storage for TXT, MD, CSV, JSON, XML and HTML
+- Persistent Markdown answer artifacts with short-lived download links
 - Responsive Home chat shell
 - Five product modes: Zeus, Olympus, OpenAI, Claude and Google AI
-- File selection UI
-- Artifact rail
+- File upload and analysis for supported text formats
+- Artifact saving, listing, download and deletion
 - Server-only AI route protected by a verified Supabase user session
 - Zod request validation
 - OpenAI fallback foundation
 - GitHub CI for typecheck and build
 - Database migrations tracked under `supabase/migrations`
 
-The current foundation is intentionally honest about what is not implemented yet: persistent project conversations in the UI, real file transport/storage, artifact generation/persistence, billing, account deletion, real Claude/Google adapters and true Olympus council execution.
+This stage has working authentication, persistent Home and Project chats, private supported-file uploads, project tasks, and saved Markdown answers. Claude and Google currently use the OpenAI fallback, and Olympus is a single OpenAI route until those adapters and the council workflow are implemented. Web research, image generation, billing, account deletion, and native App Store packaging are not included in this stage.
 
 ## Environment
 
@@ -42,7 +46,7 @@ Never expose a Supabase secret/service-role key or provider API key through a `V
 
 ## Local development
 
-1. Install from the committed lockfile once present:
+1. Install from the committed lockfile:
    `npm ci`
 2. Copy environment template:
    `cp .env.example .env.local`
@@ -55,6 +59,8 @@ Never expose a Supabase secret/service-role key or provider API key through a `V
 - `npm run build`
 
 CI runs both checks for commercial branches and pull requests to `main`.
+
+Run `npm run smoke` after the production build. The current live Supabase project must also receive the migrations before authentication, storage and RLS-backed features can work in a deployment.
 
 ## Architecture
 

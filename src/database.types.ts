@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      artifacts: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          kind: string
+          mime_type: string
+          name: string
+          owner_id: string
+          project_id: string | null
+          size_bytes: number
+          storage_path: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          mime_type?: string
+          name: string
+          owner_id: string
+          project_id?: string | null
+          size_bytes: number
+          storage_path: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          mime_type?: string
+          name?: string
+          owner_id?: string
+          project_id?: string | null
+          size_bytes?: number
+          storage_path?: string
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           created_at: string

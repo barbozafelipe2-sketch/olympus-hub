@@ -107,6 +107,12 @@ export default async function handler(req, res) {
   }
 
   const { mode, messages } = parsed.data;
+  const contextCharacters = messages.reduce((total, message) => total + message.content.length, 0);
+  if (contextCharacters > 80000) {
+    return res.status(413).json({
+      error: "This conversation context is too large for one request. Start a new chat or reduce the attached source text."
+    });
+  }
   const model =
     process.env.OPENAI_DEFAULT_MODEL ||
     process.env.OPENAI_FALLBACK_MODEL ||
@@ -167,7 +173,7 @@ export default async function handler(req, res) {
       requestId,
       provider: "OpenAI",
       model,
-      fallbackUsed: mode === "claude" || mode === "google"
+      fallbackUsed: mode === "claude" || mode === "google" || mode === "olympus"
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";

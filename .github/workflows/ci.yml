@@ -26,6 +26,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
+
       - name: Typecheck
         run: npm run typecheck
 
