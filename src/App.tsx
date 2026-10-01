@@ -1,13 +1,12 @@
 import {
   Archive,
   ChevronDown,
-  FileText,
   FolderKanban,
   Home,
   LogOut,
   Menu,
-  Paperclip,
   Plus,
+  Settings2,
   Send,
   ShieldCheck,
   Sparkles,
@@ -16,7 +15,9 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
+import { Onboarding } from "./components/Onboarding";
 import { ProjectWorkspace } from "./components/ProjectWorkspace";
+import { SettingsView } from "./components/SettingsView";
 import { useAuth } from "./hooks/useAuth";
 import { sendChat } from "./lib/api";
 import {
@@ -25,15 +26,15 @@ import {
   listProjects,
   type ProjectRow
 } from "./lib/projects";
+import { getOnboardingState } from "./lib/settings";
 import { requireSupabase } from "./lib/supabase";
 import {
   MODES,
-  type AttachmentDraft,
   type ChatMessage,
   type ModeId
 } from "./types";
 
-type View = "home" | "projects";
+type View = "home" | "projects" | "settings";
 
 type RunMeta = {
   provider: string;
@@ -84,7 +85,6 @@ export default function App() {
   const [mode, setMode] = useState<ModeId>("zeus");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [prompt, setPrompt] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(false);
@@ -96,7 +96,7 @@ export default function App() {
   const [isSending, setIsSending] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
 
   const user = auth.user;
 
@@ -109,6 +109,7 @@ export default function App() {
     if (!user) {
       setProjects([]);
       setSelectedProject(null);
+      setOnboardingComplete(null);
       return;
     }
 
@@ -135,6 +136,23 @@ export default function App() {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    void getOnboardingState()
+      .then((completed) => {
+        if (active) setOnboardingComplete(completed);
+      })
+      .catch(() => {
+        if (active) setOnboardingComplete(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
   if (!auth.configured) return <BackendSetupRequired />;
 
   if (auth.loading) {
@@ -154,48 +172,25 @@ export default function App() {
   const userId = user.id;
 
   function chooseView(next: View) {
+    setSelectedProject(null);
     setView(next);
     setMobileNavOpen(false);
-  }
-
-  function onFilesPicked(files: FileList | null) {
-    if (!files) return;
-
-    const next = Array.from(files)
-      .slice(0, 8)
-      .map((file) => ({
-        id: makeId(),
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size
-      }));
-
-    setAttachments((current) => [...current, ...next].slice(0, 8));
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function submit() {
     const text = prompt.trim();
     if (!text || isSending) return;
 
-    const attachmentNote =
-      attachments.length > 0
-        ? "\n\nAttached locally: " +
-          attachments.map((file) => file.name).join(", ") +
-          ". File transport is not enabled in this foundation yet."
-        : "";
-
     const userMessage: ChatMessage = {
       id: makeId(),
       role: "user",
-      content: text + attachmentNote,
+      content: text,
       createdAt: new Date().toISOString()
     };
 
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setPrompt("");
-    setAttachments([]);
     setError(null);
     setRunMeta(null);
     setIsSending(true);
@@ -346,6 +341,13 @@ export default function App() {
             <FolderKanban size={18} />
             Projects
           </button>
+          <button
+            className={view === "settings" ? "nav-item active" : "nav-item"}
+            onClick={() => chooseView("settings")}
+          >
+            <Settings2 size={18} />
+            Settings
+          </button>
         </nav>
 
         <div className="sidebar-spacer" />
@@ -417,26 +419,38 @@ export default function App() {
             </button>
             <div>
               <span className="eyebrow">
-                {view === "home" ? "Home" : "Project workspace"}
+                {view === "home"
+                  ? "Home"
+                  : view === "projects"
+                    ? "Project workspace"
+                    : "Account"}
               </span>
-              <h1>{view === "home" ? "Talk to OlyHub" : "Projects"}</h1>
+              <h1>
+                {view === "home"
+                  ? "Talk to OlyHub"
+                  : view === "projects"
+                    ? "Projects"
+                    : "Settings"}
+              </h1>
             </div>
           </div>
 
-          <label className="mode-select">
-            <Sparkles size={16} />
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as ModeId)}
-            >
-              {MODES.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={15} aria-hidden="true" />
-          </label>
+          {view !== "settings" && (
+            <label className="mode-select">
+              <Sparkles size={16} />
+              <select
+                value={mode}
+                onChange={(event) => setMode(event.target.value as ModeId)}
+              >
+                {MODES.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={15} aria-hidden="true" />
+            </label>
+          )}
         </header>
 
         {view === "home" ? (
@@ -481,45 +495,7 @@ export default function App() {
               </div>
 
               <div className="composer-wrap">
-                {attachments.length > 0 && (
-                  <div className="attachment-strip">
-                    {attachments.map((file) => (
-                      <div className="attachment-chip" key={file.id}>
-                        <FileText size={15} />
-                        <span>
-                          {file.name}
-                          <small>{formatBytes(file.size)}</small>
-                        </span>
-                        <button
-                          aria-label={"Remove " + file.name}
-                          onClick={() =>
-                            setAttachments((current) =>
-                              current.filter((item) => item.id !== file.id)
-                            )
-                          }
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="composer">
-                  <input
-                    ref={fileInputRef}
-                    hidden
-                    type="file"
-                    multiple
-                    onChange={(event) => onFilesPicked(event.target.files)}
-                  />
-                  <button
-                    className="icon-button"
-                    onClick={() => fileInputRef.current?.click()}
-                    aria-label="Attach files"
-                  >
-                    <Paperclip size={19} />
-                  </button>
+                <div className="composer home-composer">
                   <textarea
                     value={prompt}
                     onChange={(event) => setPrompt(event.target.value)}
@@ -542,7 +518,7 @@ export default function App() {
                   </button>
                 </div>
                 <p className="composer-caption">
-                  AI can make mistakes. Verify important outputs before acting.
+                  AI can make mistakes. Use a Project for persistent files, memory and artifacts.
                 </p>
               </div>
             </div>
@@ -618,7 +594,7 @@ export default function App() {
               </section>
             </aside>
           </section>
-        ) : (
+        ) : view === "projects" ? (
           <section className="projects-view">
             <div className="projects-heading">
               <div>
@@ -700,10 +676,26 @@ export default function App() {
               </div>
             )}
           </section>
+        ) : (
+          <SettingsView email={user.email || ""} />
         )}
           </>
         )}
       </main>
+
+      {onboardingComplete === false && (
+        <Onboarding
+          onComplete={(destination) => {
+            setOnboardingComplete(true);
+            if (destination === "project") {
+              setView("projects");
+              setProjectDialogOpen(true);
+            } else {
+              setView("home");
+            }
+          }}
+        />
+      )}
 
       {projectDialogOpen && (
         <div
