@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_limits: {
+        Row: {
+          created_at: string
+          daily_request_limit: number | null
+          daily_token_limit: number | null
+          monthly_token_limit: number | null
+          plan_code: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          daily_request_limit?: number | null
+          daily_token_limit?: number | null
+          monthly_token_limit?: number | null
+          plan_code?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          daily_request_limit?: number | null
+          daily_token_limit?: number | null
+          monthly_token_limit?: number | null
+          plan_code?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       artifact_versions: {
         Row: {
           artifact_id: string
@@ -458,6 +491,81 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      usage_events: {
+        Row: {
+          cache_write_tokens: number
+          cached_input_tokens: number
+          created_at: string
+          estimated_cost_microusd: number | null
+          execution_id: string
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+          owner_id: string
+          project_id: string | null
+          provider: string
+          reasoning_tokens: number
+          request_id: string
+          role: string
+          tool_tokens: number
+          total_tokens: number
+        }
+        Insert: {
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          created_at?: string
+          estimated_cost_microusd?: number | null
+          execution_id: string
+          id?: string
+          input_tokens?: number
+          model: string
+          output_tokens?: number
+          owner_id: string
+          project_id?: string | null
+          provider: string
+          reasoning_tokens?: number
+          request_id: string
+          role: string
+          tool_tokens?: number
+          total_tokens?: number
+        }
+        Update: {
+          cache_write_tokens?: number
+          cached_input_tokens?: number
+          created_at?: string
+          estimated_cost_microusd?: number | null
+          execution_id?: string
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+          owner_id?: string
+          project_id?: string | null
+          provider?: string
+          reasoning_tokens?: number
+          request_id?: string
+          role?: string
+          tool_tokens?: number
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_events_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
