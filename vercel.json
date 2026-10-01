@@ -5,6 +5,12 @@
   "functions": {
     "api/chat.js": {
       "maxDuration": 90
+    },
+    "api/account.js": {
+      "maxDuration": 60
+    },
+    "api/health.js": {
+      "maxDuration": 10
     }
   }
 }
