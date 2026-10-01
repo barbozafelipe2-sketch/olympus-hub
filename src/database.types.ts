@@ -14,6 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
+      artifact_versions: {
+        Row: {
+          artifact_id: string
+          content: string
+          created_at: string
+          id: string
+          model: string | null
+          owner_id: string
+          provider: string | null
+          request_id: string | null
+          version: number
+        }
+        Insert: {
+          artifact_id: string
+          content: string
+          created_at?: string
+          id?: string
+          model?: string | null
+          owner_id: string
+          provider?: string | null
+          request_id?: string | null
+          version: number
+        }
+        Update: {
+          artifact_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          model?: string | null
+          owner_id?: string
+          provider?: string | null
+          request_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifact_versions_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artifacts: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          current_version: number
+          id: string
+          kind: string
+          mime_type: string
+          owner_id: string
+          project_id: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          current_version?: number
+          id?: string
+          kind?: string
+          mime_type?: string
+          owner_id: string
+          project_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          current_version?: number
+          id?: string
+          kind?: string
+          mime_type?: string
+          owner_id?: string
+          project_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifacts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "artifacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
@@ -363,7 +464,37 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      append_artifact_version: {
+        Args: {
+          p_artifact_id: string
+          p_content: string
+          p_model?: string
+          p_provider?: string
+          p_request_id?: string
+        }
+        Returns: {
+          version: number
+          version_id: string
+        }[]
+      }
+      create_artifact_with_version: {
+        Args: {
+          p_content: string
+          p_conversation_id: string
+          p_kind: string
+          p_mime_type: string
+          p_model?: string
+          p_project_id: string
+          p_provider?: string
+          p_request_id?: string
+          p_title: string
+        }
+        Returns: {
+          artifact_id: string
+          version: number
+          version_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
