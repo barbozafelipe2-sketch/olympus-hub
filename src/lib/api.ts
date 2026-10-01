@@ -52,7 +52,9 @@ export async function sendChat(
     !data.model ||
     !Array.isArray(data.trace) ||
     !data.orchestration ||
-    !("executionId" in data)
+    !("executionId" in data) ||
+    !("artifact" in data) ||
+    !Array.isArray(data.capabilities)
   ) {
     throw new Error("OlyHub received an invalid response from the server.");
   }
