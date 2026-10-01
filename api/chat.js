@@ -4,6 +4,7 @@ import { executeMode } from "./lib/orchestrator.js";
 import {
   persistRequestedArtifact,
   readRequestedProjectFiles,
+  runImageGenerationCapability,
   runWebSearchCapability
 } from "./lib/capabilities.js";
 
@@ -665,39 +666,87 @@ export default async function handler(req, res) {
       : messages.slice(-40);
 
   const startedAt = Date.now();
-  const [fileCapability, webCapability] = await Promise.all([
-    canonicalContext
-      ? readRequestedProjectFiles({
-          client: auth.client,
-          files: canonicalContext.files,
+  const imageCapability = await runImageGenerationCapability({
+    client: auth.client,
+    ownerId: auth.user.id,
+    context: executionContext,
+    messages: effectiveMessages
+  });
+  const imageTrace = imageCapability.traces.find(
+    (capability) => capability.name === "generate_image"
+  );
+  const imageAttempted = Boolean(imageTrace);
+
+  const [fileCapability, webCapability] = imageAttempted
+    ? [
+        { context: "", traces: [] },
+        { context: "", traces: [], sources: [] }
+      ]
+    : await Promise.all([
+        canonicalContext
+          ? readRequestedProjectFiles({
+              client: auth.client,
+              files: canonicalContext.files,
+              messages: effectiveMessages
+            })
+          : Promise.resolve({ context: "", traces: [] }),
+        runWebSearchCapability({
           messages: effectiveMessages
         })
-      : Promise.resolve({ context: "", traces: [] }),
-    runWebSearchCapability({
-      messages: effectiveMessages
-    })
-  ]);
+      ]);
 
   try {
-    const result = await executeMode({
-      mode,
-      messages: effectiveMessages,
-      systemContext:
-        buildProjectSystemContext(canonicalContext) +
-        fileCapability.context +
-        webCapability.context
-    });
+    const imageSucceeded =
+      imageAttempted && imageTrace?.status === "completed" && imageCapability.artifact;
 
-    const artifactCapability = await persistRequestedArtifact({
-      client: auth.client,
-      context: executionContext,
-      messages: effectiveMessages,
-      result
-    });
+    const result = imageAttempted
+      ? {
+          reply: imageSucceeded
+            ? "Image created and saved as a private OlyHub artifact."
+            : "I couldn't complete that image request. Check the execution details and try again.",
+          provider: imageTrace?.provider || "OpenAI",
+          model: imageTrace?.model || "image-capability",
+          requestId: imageTrace?.requestId || crypto.randomUUID(),
+          fallbackUsed: false,
+          trace: [],
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+            cacheWriteTokens: 0,
+            reasoningTokens: 0,
+            toolTokens: 0,
+            totalTokens: 0
+          },
+          orchestration: {
+            mode,
+            calls: 1,
+            multiProvider: false,
+            degraded: !imageSucceeded
+          }
+        }
+      : await executeMode({
+          mode,
+          messages: effectiveMessages,
+          systemContext:
+            buildProjectSystemContext(canonicalContext) +
+            fileCapability.context +
+            webCapability.context
+        });
+
+    const artifactCapability = imageAttempted
+      ? { artifact: null, traces: [] }
+      : await persistRequestedArtifact({
+          client: auth.client,
+          context: executionContext,
+          messages: effectiveMessages,
+          result
+        });
 
     const capabilities = [
       ...fileCapability.traces,
       ...webCapability.traces,
+      ...imageCapability.traces,
       ...artifactCapability.traces
     ];
     const capabilityDegraded = capabilities.some(
@@ -742,7 +791,7 @@ export default async function handler(req, res) {
       usage,
       orchestration,
       executionId,
-      artifact: artifactCapability.artifact,
+      artifact: imageCapability.artifact || artifactCapability.artifact,
       capabilities,
       sources: webCapability.sources,
       quota,
@@ -780,7 +829,8 @@ export default async function handler(req, res) {
         ],
         capabilities: [
           ...fileCapability.traces,
-          ...webCapability.traces
+          ...webCapability.traces,
+          ...imageCapability.traces
         ]
       },
       latency_ms: Math.min(300000, Date.now() - startedAt)
