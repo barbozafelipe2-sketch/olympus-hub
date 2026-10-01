@@ -33,8 +33,9 @@ USER
    - Olympus
 -> CAPABILITY BROKER
    - read supported private Project files
+   - live web research with structured sources
    - persist/revise artifacts
-   - future web / Drive / Calendar / document parsers
+   - future Drive / Calendar / additional document parsers
 -> PROVIDER ADAPTERS
    - OpenAI
    - Anthropic
@@ -128,6 +129,17 @@ Limits for prompt ingestion:
 - up to 30,000 characters combined
 
 File contents are wrapped as untrusted data. Stored files outside supported types remain metadata-only.
+
+## Web research
+
+The Capability Broker can invoke OpenAI Responses `web_search` for explicit search/research/latest/news intent and selected clearly time-sensitive queries.
+
+- Search is a real hosted tool call, not a prompt claim.
+- Search failure degrades the execution and tells the final model not to claim current verification.
+- Search token usage is included in the same usage ledger as orchestration model calls.
+- Retrieved source URLs/titles are returned as structured data, stored in assistant message metadata and rendered as persistent clickable citations.
+- Persisted citation URLs are restricted to HTTP/HTTPS.
+- Search intent is deliberately narrower than a generic keyword such as “current” to avoid unnecessary tool cost.
 
 ## Artifacts
 
@@ -269,12 +281,14 @@ Implemented:
 - Complete account deletion ✅
 - Persistent onboarding ✅
 - PWA foundation ✅
+- Live web research + persistent citations ✅
+- Two-user RLS E2E harness ✅ (execution requires staging credentials)
 - Locked install + CI smoke ✅
 
 Still required before a responsible public/App Store launch:
 - final plan/pricing and billing model
 - privacy policy + terms URLs tied to the actual commercial entity
-- runtime E2E tests with at least two users for account isolation
+- execute the two-user isolation harness against staging and retain the result
 - native iOS wrapper/bundle identity and App Store signing
 - native privacy manifest after SDK/native stack is finalized
 - App Store product metadata/screenshots/review credentials
