@@ -181,6 +181,10 @@ export function ProjectWorkspace({
       const result = await sendChat(
         {
           mode,
+          projectContext: {
+            name: project.name,
+            goal: project.goal
+          },
           messages: nextMessages.filter(
             (message) => !message.id.startsWith("project-welcome-")
           )
@@ -201,12 +205,6 @@ export function ProjectWorkspace({
         }
       });
 
-      const touchedAt = new Date().toISOString();
-      await touchConversationAndProject({
-        conversationId,
-        projectId: project.id
-      });
-
       setMessages((current) => [...current, assistant]);
       setRunMeta({
         provider: result.provider,
@@ -214,7 +212,18 @@ export function ProjectWorkspace({
         fallbackUsed: result.fallbackUsed,
         requestId: result.requestId
       });
-      onProjectTouched(project.id, touchedAt);
+
+      const touchedAt = new Date().toISOString();
+      try {
+        await touchConversationAndProject({
+          conversationId,
+          projectId: project.id
+        });
+        onProjectTouched(project.id, touchedAt);
+      } catch (touchError) {
+        console.warn("Project timestamp refresh failed", touchError);
+        setError("Response saved. Project activity timestamp could not refresh.");
+      }
     } catch (caught) {
       setRetryAvailable(true);
       setError(
