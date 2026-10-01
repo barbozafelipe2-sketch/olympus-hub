@@ -4,16 +4,27 @@ import {
   FileText,
   FolderKanban,
   Home,
+  LogOut,
   Menu,
   Paperclip,
   Plus,
   Send,
   ShieldCheck,
   Sparkles,
+  UserRound,
   X
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
+import { useAuth } from "./hooks/useAuth";
 import { sendChat } from "./lib/api";
+import {
+  archiveProject,
+  createProject,
+  listProjects,
+  type ProjectRow
+} from "./lib/projects";
+import { requireSupabase } from "./lib/supabase";
 import {
   MODES,
   type AttachmentDraft,
@@ -22,12 +33,6 @@ import {
 } from "./types";
 
 type View = "home" | "projects";
-
-type Project = {
-  id: string;
-  name: string;
-  goal: string;
-};
 
 type RunMeta = {
   provider: string;
@@ -56,23 +61,87 @@ function formatBytes(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+function formatUpdatedAt(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
 export default function App() {
+  const auth = useAuth();
   const [view, setView] = useState<View>("home");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mode, setMode] = useState<ModeId>("zeus");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [projectGoal, setProjectGoal] = useState("");
+  const [projectBusy, setProjectBusy] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const user = auth.user;
+
   const selectedMode = useMemo(
     () => MODES.find((item) => item.id === mode) ?? MODES[0],
     [mode]
   );
+
+  useEffect(() => {
+    if (!user) {
+      setProjects([]);
+      return;
+    }
+
+    let active = true;
+    setProjectsLoading(true);
+    setProjectError(null);
+
+    void listProjects()
+      .then((rows) => {
+        if (active) setProjects(rows);
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setProjectError(
+          caught instanceof Error ? caught.message : "Unable to load projects."
+        );
+      })
+      .finally(() => {
+        if (active) setProjectsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  if (!auth.configured) return <BackendSetupRequired />;
+
+  if (auth.loading) {
+    return (
+      <main className="auth-shell single">
+        <section className="auth-card setup-card">
+          <div className="auth-mark">OH</div>
+          <span className="eyebrow">OlyHub</span>
+          <h2>Restoring your workspace...</h2>
+        </section>
+      </main>
+    );
+  }
+
+  if (!user) return <AuthScreen />;
+
+  const userId = user.id;
 
   function chooseView(next: View) {
     setView(next);
@@ -126,10 +195,7 @@ export default function App() {
 
     try {
       const result = await sendChat(
-        {
-          messages: nextMessages,
-          mode
-        },
+        { messages: nextMessages, mode },
         controller.signal
       );
 
@@ -163,15 +229,53 @@ export default function App() {
     }
   }
 
-  function addProject() {
-    setProjects((current) => [
-      ...current,
-      {
-        id: makeId(),
-        name: "Untitled project",
-        goal: "Define the outcome for this workspace."
-      }
-    ]);
+  async function submitProject(event: FormEvent) {
+    event.preventDefault();
+    const name = projectName.trim();
+    if (!name || projectBusy) return;
+
+    setProjectBusy(true);
+    setProjectError(null);
+
+    try {
+      const project = await createProject({
+        ownerId: userId,
+        name,
+        goal: projectGoal
+      });
+
+      setProjects((current) => [project, ...current]);
+      setProjectName("");
+      setProjectGoal("");
+      setProjectDialogOpen(false);
+    } catch (caught) {
+      setProjectError(
+        caught instanceof Error ? caught.message : "Unable to create project."
+      );
+    } finally {
+      setProjectBusy(false);
+    }
+  }
+
+  async function removeProject(projectId: string) {
+    setProjectError(null);
+
+    try {
+      await archiveProject(projectId);
+      setProjects((current) =>
+        current.filter((project) => project.id !== projectId)
+      );
+    } catch (caught) {
+      setProjectError(
+        caught instanceof Error ? caught.message : "Unable to archive project."
+      );
+    }
+  }
+
+  async function signOut() {
+    setError(null);
+    const { error: signOutError } = await requireSupabase().auth.signOut();
+    if (signOutError) setError(signOutError.message);
   }
 
   return (
@@ -192,7 +296,15 @@ export default function App() {
           </button>
         </div>
 
-        <button className="new-chat" onClick={() => setMessages(initialMessages)}>
+        <button
+          className="new-chat"
+          onClick={() => {
+            setMessages(initialMessages);
+            setRunMeta(null);
+            setError(null);
+            chooseView("home");
+          }}
+        >
           <Plus size={17} />
           New chat
         </button>
@@ -215,6 +327,22 @@ export default function App() {
         </nav>
 
         <div className="sidebar-spacer" />
+
+        <div className="account-card">
+          <UserRound size={17} />
+          <div>
+            <strong>{user.user_metadata.display_name || "OlyHub member"}</strong>
+            <span>{user.email}</span>
+          </div>
+          <button
+            className="account-signout"
+            onClick={() => void signOut()}
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
 
         <div className="commercial-note">
           <ShieldCheck size={17} />
@@ -253,7 +381,10 @@ export default function App() {
 
           <label className="mode-select">
             <Sparkles size={16} />
-            <select value={mode} onChange={(event) => setMode(event.target.value as ModeId)}>
+            <select
+              value={mode}
+              onChange={(event) => setMode(event.target.value as ModeId)}
+            >
               {MODES.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.label}
@@ -272,7 +403,7 @@ export default function App() {
                   <strong>{selectedMode.label}</strong>
                   <span>{selectedMode.description}</span>
                 </div>
-                <span className="status-dot">Ready</span>
+                <span className="status-dot">Authenticated</span>
               </div>
 
               <div className="chat-stream" aria-live="polite">
@@ -422,22 +553,38 @@ export default function App() {
                 <span className="eyebrow">Durable workspaces</span>
                 <h2>Projects</h2>
                 <p>
-                  Each commercial project will own its goal, conversations, files,
-                  approved memory and generated artifacts.
+                  Projects are stored in Supabase and isolated by user with
+                  row-level security.
                 </p>
               </div>
-              <button className="primary-button" onClick={addProject}>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  setProjectError(null);
+                  setProjectDialogOpen(true);
+                }}
+              >
                 <Plus size={17} />
                 New project
               </button>
             </div>
 
-            {projects.length === 0 ? (
+            {projectError && <div className="projects-error">{projectError}</div>}
+
+            {projectsLoading ? (
+              <div className="project-empty">
+                <FolderKanban size={32} />
+                <h3>Loading projects...</h3>
+              </div>
+            ) : projects.length === 0 ? (
               <div className="project-empty">
                 <FolderKanban size={32} />
                 <h3>No projects yet</h3>
                 <p>Create a workspace for work that needs continuity.</p>
-                <button className="primary-button" onClick={addProject}>
+                <button
+                  className="primary-button"
+                  onClick={() => setProjectDialogOpen(true)}
+                >
                   Create first project
                 </button>
               </div>
@@ -445,12 +592,22 @@ export default function App() {
               <div className="project-grid">
                 {projects.map((project) => (
                   <article className="project-card" key={project.id}>
-                    <div className="project-icon">
-                      <FolderKanban size={20} />
+                    <div className="project-card-top">
+                      <div className="project-icon">
+                        <FolderKanban size={20} />
+                      </div>
+                      <button
+                        className="project-archive"
+                        onClick={() => void removeProject(project.id)}
+                        aria-label={"Archive " + project.name}
+                        title="Archive project"
+                      >
+                        <Archive size={15} />
+                      </button>
                     </div>
                     <h3>{project.name}</h3>
-                    <p>{project.goal}</p>
-                    <span>Local shell only — persistence comes with the backend layer.</span>
+                    <p>{project.goal || "No goal defined yet."}</p>
+                    <span>Updated {formatUpdatedAt(project.updated_at)}</span>
                   </article>
                 ))}
               </div>
@@ -458,6 +615,68 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {projectDialogOpen && (
+        <div
+          className="dialog-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target && !projectBusy) {
+              setProjectDialogOpen(false);
+            }
+          }}
+        >
+          <form className="project-dialog" onSubmit={submitProject}>
+            <div className="dialog-heading">
+              <div>
+                <span className="eyebrow">New workspace</span>
+                <h2>Create project</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                disabled={projectBusy}
+                onClick={() => setProjectDialogOpen(false)}
+                aria-label="Close project dialog"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <label>
+              <span>Name</span>
+              <input
+                autoFocus
+                maxLength={120}
+                required
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="e.g. Launch OlyHub"
+              />
+            </label>
+
+            <label>
+              <span>Goal</span>
+              <textarea
+                maxLength={5000}
+                value={projectGoal}
+                onChange={(event) => setProjectGoal(event.target.value)}
+                placeholder="What outcome should this project produce?"
+                rows={5}
+              />
+            </label>
+
+            {projectError && <div className="auth-alert error">{projectError}</div>}
+
+            <button
+              className="primary-button dialog-submit"
+              type="submit"
+              disabled={projectBusy || !projectName.trim()}
+            >
+              {projectBusy ? "Creating..." : "Create project"}
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { ApiChatResponse, ChatMessage, ModeId } from "../types";
+import { requireSupabase } from "./supabase";
 
 type SendChatInput = {
   messages: ChatMessage[];
@@ -9,9 +10,19 @@ export async function sendChat(
   input: SendChatInput,
   signal?: AbortSignal
 ): Promise<ApiChatResponse> {
+  const {
+    data: { session },
+    error: sessionError
+  } = await requireSupabase().auth.getSession();
+
+  if (sessionError || !session?.access_token) {
+    throw new Error("Your OlyHub session is no longer valid. Sign in again.");
+  }
+
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: {
+      Authorization: "Bearer " + session.access_token,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
