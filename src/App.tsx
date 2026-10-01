@@ -141,6 +141,8 @@ export default function App() {
 
   if (!user) return <AuthScreen />;
 
+  const userId = user.id;
+
   function chooseView(next: View) {
     setView(next);
     setMobileNavOpen(false);
@@ -237,7 +239,7 @@ export default function App() {
 
     try {
       const project = await createProject({
-        ownerId: user.id,
+        ownerId: userId,
         name,
         goal: projectGoal
       });
