@@ -1368,3 +1368,140 @@ select:focus-visible {
     flex-direction: column;
   }
 }
+
+
+/* Project memory + files */
+
+.rail-heading-split {
+  justify-content: space-between;
+}
+
+.rail-heading-split > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rail-heading-split small {
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.memory-compose {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.memory-compose textarea,
+.memory-controls select {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #0d0f14;
+  color: var(--text);
+  border-radius: 10px;
+}
+
+.memory-compose textarea {
+  resize: vertical;
+  min-height: 62px;
+  padding: 9px 10px;
+  line-height: 1.45;
+  font-size: 10px;
+}
+
+.memory-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.memory-controls select {
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+.rail-action {
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #1b1407;
+  font-weight: 800;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.rail-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rail-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.rail-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.rail-list-item p {
+  margin: 3px 0 0;
+  color: #d8dae1;
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rail-list-item small {
+  color: var(--muted-2);
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.rail-list-item > button,
+.row-actions button {
+  width: 27px;
+  height: 27px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.rail-list-item > button:hover,
+.row-actions button:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.file-row {
+  align-items: center;
+}
+
+.rail-footnote {
+  margin: 10px 0 0;
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.context-rail {
+  scrollbar-width: thin;
+}
