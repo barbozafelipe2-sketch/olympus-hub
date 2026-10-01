@@ -16,6 +16,7 @@ import {
   X
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { ArtifactPreview } from "./components/ArtifactPreview";
 import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
 import { MessageSources } from "./components/MessageSources";
 import { Onboarding } from "./components/Onboarding";
@@ -830,11 +831,14 @@ export default function App() {
                   ) : (
                     homeArtifacts.slice(0, 10).map((artifact) => (
                       <div className="rail-list-item file-row" key={artifact.id}>
-                        <div>
-                          <p>{artifact.title}</p>
-                          <small>
-                            {artifact.kind} · v{artifact.current_version}
-                          </small>
+                        <div className="artifact-copy">
+                          <ArtifactPreview artifact={artifact} />
+                          <div>
+                            <p>{artifact.title}</p>
+                            <small>
+                              {artifact.kind} · v{artifact.current_version}
+                            </small>
+                          </div>
                         </div>
                         <span className="row-actions">
                           <button
