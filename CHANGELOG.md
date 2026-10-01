@@ -20,6 +20,9 @@
 - Configuration-only health endpoint.
 - PWA manifest, production service worker and install metadata.
 - Capability Broker text/Markdown/CSV/JSON Project file reading.
+- Live web research capability using hosted OpenAI web search.
+- Persistent clickable web-source citations in Home and Projects.
+- Manual two-user staging RLS isolation E2E harness.
 
 ### Changed
 - Project and Home context are loaded canonically on the server through the authenticated Supabase/RLS context.
@@ -40,7 +43,7 @@
 - Native iOS packaging and signing are not configured.
 - Billing/pricing is not finalized.
 - Privacy policy and Terms URLs are not supplied.
-- Runtime multi-user E2E account-isolation tests remain.
+- The multi-user isolation harness exists but has not yet been executed with staging test credentials.
 - PDF/DOCX/XLSX/PPTX/image/audio/video parsing is not yet available through the Capability Broker.
 
 ## 0.4.0 - Project memory and private files
