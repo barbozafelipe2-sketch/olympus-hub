@@ -55,3 +55,18 @@ export async function deleteArtifact(artifactId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+
+export async function listConversationArtifacts(
+  conversationId: string
+): Promise<ArtifactRow[]> {
+  const { data, error } = await requireSupabase()
+    .from("artifacts")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
