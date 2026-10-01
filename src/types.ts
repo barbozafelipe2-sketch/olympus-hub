@@ -16,6 +16,16 @@ export type AttachmentDraft = {
   size: number;
 };
 
+export type ApiUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  toolTokens: number;
+  totalTokens: number;
+};
+
 export type ApiTraceEntry = {
   role: string;
   provider: string;
@@ -23,6 +33,7 @@ export type ApiTraceEntry = {
   model: string;
   requestId: string;
   fallbackFrom: string | null;
+  usage: ApiUsage;
 };
 
 export type ApiCapabilityTrace = {
@@ -52,6 +63,28 @@ export type ApiOrchestration = {
   degraded: boolean;
 };
 
+export type ApiQuota = {
+  allowed: boolean;
+  reason: string | null;
+  planCode: string;
+  status: string;
+  limits: {
+    dailyRequests: number | null;
+    dailyTokens: number | null;
+    monthlyTokens: number | null;
+  };
+  usage: {
+    dailyRequests: number;
+    dailyTokens: number;
+    monthlyTokens: number;
+  };
+  remaining: {
+    dailyRequests: number | null;
+    dailyTokens: number | null;
+    monthlyTokens: number | null;
+  };
+};
+
 export type ApiChatResponse = {
   reply: string;
   requestId: string;
@@ -63,6 +96,9 @@ export type ApiChatResponse = {
   orchestration: ApiOrchestration;
   artifact: ApiArtifact | null;
   capabilities: ApiCapabilityTrace[];
+  usage: ApiUsage;
+  quota: ApiQuota;
+  usageRecorded: boolean;
 };
 
 export const MODES: Array<{
