@@ -44,9 +44,21 @@ assert(
 
 const chatApi = readFileSync(resolve("api/chat.js"), "utf8");
 assert(
-  chatApi.includes("Approved project memory") &&
-    chatApi.includes("metadata only; do not claim file contents were read"),
+  chatApi.includes("Project memory is user-approved context") &&
+    chatApi.includes("Never claim to have read a stored file"),
   "Chat API is missing memory/file grounding safeguards"
+);
+
+for (const path of ["api/lib/providers.js", "api/lib/orchestrator.js"]) {
+  assert(existsSync(resolve(path)), path + " is missing");
+}
+
+const orchestrator = readFileSync(resolve("api/lib/orchestrator.js"), "utf8");
+assert(
+  orchestrator.includes("executeZeus") &&
+    orchestrator.includes("executeOlympus") &&
+    orchestrator.includes("withOpenAIFallback"),
+  "Zeus/Olympus orchestration is not wired"
 );
 
 console.log("OlyHub smoke: PASS");
