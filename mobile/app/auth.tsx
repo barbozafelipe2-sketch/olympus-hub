@@ -233,25 +233,10 @@ export default function AuthScreen() {
             placeholderTextColor={C.dim}
             secureTextEntry
             autoComplete={creating ? "new-password" : "current-password"}
-            onSubmitEditing={() => void submit()}
+            onSubmitEditing={() => {
+              if (!creating) void submit();
+            }}
             style={input}
-          />
-          {!!error && (
-            <Text
-              accessibilityRole="alert"
-              style={{ color: C.red, lineHeight: 20 }}
-            >
-              {error}
-            </Text>
-          )}
-          {!!notice && (
-            <Text style={{ color: C.green, lineHeight: 20 }}>{notice}</Text>
-          )}
-          <Button
-            title={creating ? "Create account" : "Sign in"}
-            onPress={() => void submit()}
-            loading={busy}
-            style={{ marginTop: 2 }}
           />
           <Text
             style={{
@@ -263,10 +248,12 @@ export default function AuthScreen() {
             }}
           >
             {creating
-              ? "OlyHub stores account and workspace data to provide the service. AI providers receive your prompts only after you allow AI processing."
+              ? "Creating an account stores your email, optional name and workspace data with OlyHub. AI providers receive prompts only after you allow AI processing."
               : "Your account and work data are handled under OlyHub’s privacy practices."}
           </Text>
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: 18 }}>
+          <View
+            style={{ flexDirection: "row", justifyContent: "center", gap: 18 }}
+          >
             {privacyPolicyUrl?.startsWith("https://") ? (
               <Pressable
                 accessibilityRole="link"
@@ -296,6 +283,23 @@ export default function AuthScreen() {
               Legal links must be configured before App Store release.
             </Text>
           )}
+          {!!error && (
+            <Text
+              accessibilityRole="alert"
+              style={{ color: C.red, lineHeight: 20 }}
+            >
+              {error}
+            </Text>
+          )}
+          {!!notice && (
+            <Text style={{ color: C.green, lineHeight: 20 }}>{notice}</Text>
+          )}
+          <Button
+            title={creating ? "Create account" : "Sign in"}
+            onPress={() => void submit()}
+            loading={busy}
+            style={{ marginTop: 2 }}
+          />
           <Text
             style={{
               color: C.dim,
