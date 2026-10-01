@@ -142,10 +142,25 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setProjects([]);
+      setConversations([]);
+      setCurrentProject(null);
+      setActiveConversationId(null);
+      setMessages(initialMessages);
+      setArtifacts([]);
+      setTasks([]);
+      setRunMeta(null);
       return;
     }
 
     let active = true;
+    // A different authenticated user must never inherit the previous
+    // account's in-memory workspace while their own data is loading.
+    setCurrentProject(null);
+    setActiveConversationId(null);
+    setMessages(initialMessages);
+    setArtifacts([]);
+    setTasks([]);
+    setRunMeta(null);
     setProjectsLoading(true);
     setProjectError(null);
 
