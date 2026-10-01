@@ -1,184 +1,283 @@
 # OlyHub Commercial Architecture
 
-Status: Project continuity + memory/files foundation
+Status: continuity + orchestration + artifact/capability foundation
 Repository: `barbozafelipe2-sketch/olympus-hub`
 Active code line: `main`
 
-## Product boundary
+## Boundary
 
-This repository is the commercial OlyHub product intended for customer distribution and eventual Apple App Store packaging.
+This repository is the multi-user commercial OlyHub product. It remains strictly separate from the private `barbozafelipe2-sketch/zeus-proxy` product.
 
-It must remain separate from `barbozafelipe2-sketch/zeus-proxy`, which is Felipe's private/personal environment.
-
-Never copy personal data, private prompts, unrestricted admin capabilities, credentials, personal memory, or private execution rules from Zeus Proxy into the commercial product.
+Never copy personal prompts, personal memory, credentials, private data or unrestricted private execution rules from Zeus Proxy into this repository.
 
 ## Product thesis
 
-OlyHub does not win by pretending to own a better base model than OpenAI, Anthropic or Google.
+Foundation models are infrastructure. OlyHub owns durable work state.
 
-It wins by owning continuity:
-- Projects
-- persistent conversations
-- scoped memory
-- files
-- artifacts
+USER
+-> EXPERIENCE
+   - Home conversations
+   - Projects
+   - Files
+   - Memory
+   - Tasks
+   - Artifacts
+-> AUTHORIZATION / CONTEXT
+   - Supabase Auth
+   - RLS
+   - canonical server-side context
+   - long-history checkpoints
+-> ORCHESTRATION
+   - Direct
+   - Zeus
+   - Olympus
+-> CAPABILITY BROKER
+   - read supported private Project files
+   - persist/revise artifacts
+   - future web / Drive / Calendar / document parsers
+-> PROVIDER ADAPTERS
+   - OpenAI
+   - Anthropic
+   - Google AI
+-> OBSERVABILITY / CONTROL
+   - execution traces
+   - token ledger
+   - quotas
+   - health configuration
+-> DURABLE STORES
+   - Postgres
+   - Supabase Storage
+
+## Home
+
+Home is now durable rather than disposable.
+
+- New chat creates a real conversation row.
+- Recent conversations restore across sessions.
+- Mode is saved per conversation.
+- User messages are persisted before provider execution.
+- Assistant messages are persisted with trace metadata.
+- Explicit deliverables can become versioned artifacts.
+- The server validates the Home conversation through RLS and loads canonical recent messages.
+
+Home does not currently expose persistent file storage or approved memory; those remain Project capabilities.
+
+## Projects
+
+Each Project has one durable conversation.
+
+A Project restores:
+- conversation history
+- saved mode
+- goal
+- approved memory
 - tasks
-- traces
-- cross-device return state
+- private files
+- artifacts
 
-The provider is infrastructure. OlyHub owns the user's working context.
+The browser sends Project/conversation identifiers. The API loads canonical Project state with the authenticated user's Supabase context, so RLS remains the authorization boundary.
 
-## Commercial surfaces
+### Long history
 
-### Home
-Open-ended conversation. The user can choose:
-- OpenAI
-- Google AI
-- Claude
-- Zeus
-- Olympus
+Project inference uses the most recent canonical messages plus a deterministic checkpoint of older transcript data. Approved memory stays separate and higher-value durable facts/decisions do not depend on an infinite raw transcript.
 
-### Projects
-Durable customer workspaces backed by Supabase.
+## Memory
 
-Each Project currently has exactly one durable conversation. Opening a Project restores the saved chat and saved mode. User and assistant messages persist in Postgres under owner-scoped RLS.
+Project memory is user-approved and removable.
 
-Provider/model/request metadata is stored with assistant messages for future trace views.
+Database policy:
+- max 40 items per owner/scope
+- max 15,000 total characters per owner/scope
+- item max 1,500 characters
+- deduplication
+- kind + importance ranking
 
-Implemented workspace layers:
-- persistent conversations
-- approved project memory
-- private project files
+Memory kinds:
+- fact
+- preference
+- decision
+- outcome
+- instruction
 
-Next layers:
-- artifact generation/versioning
-- project task execution
-- execution traces
+## Tasks
 
-## Identity and authorization
+Project tasks are durable rows with:
+- todo / in_progress / done
+- priority
+- optional due date at schema level
 
-Supabase Auth is the identity source for the commercial product.
+The Project rail can create, advance and delete tasks. The server includes current task state in Zeus/Olympus Project context.
 
-Browser:
-- Supabase project URL
-- Supabase publishable key
+## Files
 
-Server:
-- Supabase project URL
-- Supabase publishable key for bearer-token verification
-- Provider secrets remain server only
+Project files live in the private `project-files` bucket under:
+`<user-id>/<project-id>/<object>`.
 
-Authorization is database-enforced with RLS. The client supplies ownership IDs for inserts, but policies independently require them to equal `auth.uid()`.
+Storage RLS validates authenticated user and Project ownership.
 
-No authorization decision is based on user-editable `user_metadata`.
+Capability Broker v1 can read:
+- text/plain
+- text/markdown
+- text/csv
+- application/json
 
-## Data model
+Limits for prompt ingestion:
+- up to 1 MB file size for readable-file capability
+- up to 12,000 characters per file
+- up to 3 files per request
+- up to 30,000 characters combined
 
-### profiles
-Private customer profile row keyed to `auth.users.id`.
+File contents are wrapped as untrusted data. Stored files outside supported types remain metadata-only.
 
-### projects
-Durable customer workspaces.
+## Artifacts
 
-### conversations
-One durable conversation per Project today. The database enforces uniqueness for non-null `project_id`.
+Artifacts are versioned durable deliverables.
 
-### messages
-Persistent conversation messages. Assistant rows can store request/provider/model/fallback metadata.
+Tables:
+- `artifacts`
+- `artifact_versions`
 
-### project_tasks
-Project-scoped work items.
+Supported semantic kinds:
+- document
+- report
+- code
+- data
+- note
 
-### project_memories
-Explicit user-approved context. Per scope the database enforces 40 items, 15,000 total characters, deduplication, kind and importance ranking.
+Explicit create intents can persist the completed model result as an artifact. Explicit revision intents append a new immutable version instead of overwriting the previous content. Home and Project artifacts are supported.
 
-### project_files
-Metadata for private Storage objects. Object paths are bound to user ID + Project ID and protected separately by Storage RLS.
+## Provider adapters
 
-All exposed product tables have RLS enabled.
+### OpenAI
+Responses API; required commercial fallback.
 
-## Project chat lifecycle
+### Anthropic
+Messages API.
 
-1. User opens a Project.
-2. OlyHub loads or creates the Project conversation.
-3. Saved messages and saved mode are restored.
-4. The Project name and goal are passed to the server as validated context.
-5. The user message is persisted before provider execution.
-6. The provider response is persisted with run metadata.
-7. Project/conversation activity timestamps are refreshed.
-8. If provider execution fails, retry reuses the saved message rather than duplicating it.
+### Google AI
+Gemini Interactions API.
 
-This gives OlyHub a durable return point instead of a disposable chat session.
+Provider credentials are server-only. A small in-process failure circuit temporarily blocks a repeatedly failing provider inside the running instance.
 
-## Mode contract
+## Zeus
 
-### Direct provider modes
-OpenAI, Google AI and Claude route to the named provider when that provider adapter is configured.
+Zeus is the default daily orchestration layer.
 
-OpenAI is the required fallback provider for unavailable or unhealthy provider adapters.
+1. Inspect request shape.
+2. Choose a configured route.
+3. Use OpenAI fallback when another route fails/unavailable.
+4. For review-worthy work, allow one focused reviewer.
+5. Integrate with a Director call.
+6. Return one result plus execution trace.
 
-### Zeus
-Zeus is the default daily orchestration mode:
-1. compile request and constraints
-2. select the strongest single available route
-3. use OpenAI as fallback
-4. add at most one reviewer when expected review value justifies latency/cost
-5. return one integrated answer
+## Olympus
 
-### Olympus
-Olympus is a deliberate council mode:
-1. compile the request
-2. choose 2 specialists, or 3 for heavier work
-3. allow at most 1 focused critic
-4. Director integrates disagreements
-5. return one answer
+Olympus is a real multi-call orchestration mode.
 
-The current API does not claim real council execution yet. Until adapters/orchestration are implemented, Olympus degrades transparently to the OpenAI foundation route.
+1. Run 2 specialists, or 3 for heavier work.
+2. Keep successful specialist calls if another fails.
+3. Run one focused critic when available.
+4. Director synthesizes one final result.
+5. Persist exact provider/model/request trace.
 
-## Security boundary
+The product does not claim a provider participated unless it appears in the execution trace.
 
-- Provider secrets are server-only.
-- Supabase secret/service-role keys are never used in the browser.
-- `/api/chat` requires a verified Supabase bearer token.
-- Client payloads are validated server-side with Zod.
-- Project context is separately schema-validated.
+## Usage and quotas
+
+Each provider adapter normalizes provider-reported token usage. Zeus/Olympus aggregate all calls.
+
+`usage_events` records per model call:
+- provider
+- model
+- orchestration role
+- request id
+- input/output tokens
+- cache usage where available
+- reasoning/thought tokens where available
+- tool tokens where available
+
+Dollar cost is deliberately nullable until OlyHub has a versioned pricing source. No cost is guessed from characters.
+
+`account_limits` supports optional per-user limits. Optional deployment-wide env limits are fallback controls. Quota preflight happens before provider tokens are spent.
+
+## Execution traces
+
+`executions` records:
+- mode/status
+- project/conversation scope
+- provider/model/request
+- fallback
+- call count
+- multi-provider flag
+- degraded state
+- latency
+- model-call trace
+- capability trace
+
+## Identity and account lifecycle
+
+Supabase Auth is the identity source.
+
+- Client uses publishable values only.
+- RLS enforces per-user access.
+- `SUPABASE_SECRET_KEY` is server-only and used for complete account deletion.
+- Account deletion removes private Storage objects first, then deletes the Auth user; dependent database rows cascade.
+- Onboarding completion is stored in the user's profile.
+
+## PWA and operations
+
+The web product includes:
+- web manifest
+- standalone PWA metadata
+- production service worker
+- explicit rule never to cache authenticated `/api/` responses
+- configuration-only health endpoint
+
+`/api/health` intentionally distinguishes deployment configuration from live provider health. It never calls a provider “healthy” merely because a key exists.
+
+## Security model
+
+- RLS on all exposed product tables.
+- User JWT verified before AI provider spend.
+- Project/Home scopes loaded server-side under the user's RLS context.
 - Client-controlled system prompts are not accepted.
-- Errors returned to clients are normalized.
-- Destructive or externally consequential actions will use PREPARE -> SHOW USER -> APPROVE -> EXECUTE -> VERIFY.
-- Public-schema tables use RLS and owner checks.
-- Privileged helper functions live in `app_private`, not `public`.
+- Provider keys never enter browser code.
+- Private Storage has separate RLS.
+- Stored file content is treated as untrusted input.
+- Destructive account deletion requires explicit confirmation.
+- Service worker excludes authenticated APIs.
+- Errors returned to the client are normalized.
 
-## Current stack
+## Current public-beta gates
 
-- React + TypeScript
-- Vite
-- Supabase Auth + Postgres + RLS
-- Zod validation
-- Vercel server functions
-- OpenAI Responses API foundation route
-
-## Apple App Store path
-
-The React product must be stable before native packaging is added. The expected path is a native wrapper such as Capacitor, with bundle identity, Sign in with Apple requirements when applicable, privacy disclosures, purchase/subscription rules, push notification entitlements and App Store review assets handled as a dedicated release phase.
-
-Do not treat a responsive web build alone as App Store-ready.
-
-## Definition of done before public beta
-
+Implemented:
 - Authentication ✅
-- Per-user/project RLS ✅
+- Per-user RLS ✅
+- Persistent Home chats ✅
 - Persistent Projects ✅
-- Persistent Project conversations ✅
-- Locked dependency install + executable smoke ✅
-- Account deletion
-- Real file upload and secure object storage ✅
-- Artifact persistence/versioning
-- Memory policy and bounded approved context ✅
-- Long-history compaction/summarization
-- Provider adapter registry and health/fallback rules
-- Zeus and Olympus orchestration implemented and traceable
-- Server-side quotas/rate limits
-- Usage/cost ledger
-- Privacy policy and terms
-- Observability and provider failure traces
-- End-to-end tests for chat, upload, projects and account isolation
+- Long Project history checkpointing ✅
+- Approved memory ✅
+- Durable tasks ✅
+- Private files ✅
+- Versioned artifacts ✅
+- OpenAI/Anthropic/Google adapters ✅
+- Zeus orchestration ✅
+- Olympus orchestration ✅
+- Durable traces ✅
+- Usage ledger ✅
+- Server quota controls ✅
+- Complete account deletion ✅
+- Persistent onboarding ✅
+- PWA foundation ✅
+- Locked install + CI smoke ✅
+
+Still required before a responsible public/App Store launch:
+- final plan/pricing and billing model
+- privacy policy + terms URLs tied to the actual commercial entity
+- runtime E2E tests with at least two users for account isolation
+- native iOS wrapper/bundle identity and App Store signing
+- native privacy manifest after SDK/native stack is finalized
+- App Store product metadata/screenshots/review credentials
+- IAP/StoreKit implementation if the chosen iOS business model requires it
+- supported parsers/capabilities for additional file types
+- production observability/alerting beyond durable traces
