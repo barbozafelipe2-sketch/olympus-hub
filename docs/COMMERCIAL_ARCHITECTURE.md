@@ -1,6 +1,6 @@
 # OlyHub Commercial Architecture
 
-Status: foundation
+Status: Supabase foundation
 Repository: `barbozafelipe2-sketch/olympus-hub`
 
 ## Product boundary
@@ -14,7 +14,7 @@ Never copy personal data, private prompts, unrestricted admin capabilities, cred
 ## Commercial surfaces
 
 ### Home
-Open-ended conversation. The user can choose one of five product modes:
+Open-ended conversation. The user can choose:
 - OpenAI
 - Google AI
 - Claude
@@ -22,16 +22,53 @@ Open-ended conversation. The user can choose one of five product modes:
 - Olympus
 
 ### Projects
-Durable customer workspaces. The target backend contract is:
+Durable customer workspaces. Projects are now persisted in Supabase and owner-scoped by RLS.
+
+The backend schema is prepared for:
 - goal
 - conversations
+- messages
 - tasks
-- files
-- approved memory
-- artifacts
-- execution traces
+- files (next storage stage)
+- approved memory (next memory stage)
+- artifacts (next artifact stage)
+- execution traces (next orchestration stage)
 
-No project data is persisted in the current foundation commit. The current Project UI is intentionally local-only so the interface does not pretend persistence exists.
+## Identity and authorization
+
+Supabase Auth is the identity source for the commercial product.
+
+Browser:
+- Supabase project URL
+- Supabase publishable key
+
+Server:
+- Supabase project URL
+- Supabase publishable key for bearer-token verification
+- Provider secrets remain server only
+
+Authorization is database-enforced with RLS. The client supplies ownership IDs for inserts, but policies independently require them to equal `auth.uid()`.
+
+No authorization decision is based on user-editable `user_metadata`.
+
+## Data model
+
+### profiles
+Private customer profile row keyed to `auth.users.id`.
+
+### projects
+Durable customer workspaces.
+
+### conversations
+Chats may belong to a project or the user's global space.
+
+### messages
+Conversation messages with metadata reserved for future provider/execution references.
+
+### project_tasks
+Project-scoped work items.
+
+All five tables have RLS enabled.
 
 ## Mode contract
 
@@ -41,59 +78,65 @@ OpenAI, Google AI and Claude route to the named provider when that provider adap
 OpenAI is the required fallback provider for unavailable or unhealthy provider adapters.
 
 ### Zeus
-Zeus is an orchestration mode, not a separate model. Target behavior:
-1. compile the request and constraints
-2. select the strongest single available route for the task
+Zeus is the default daily orchestration mode:
+1. compile request and constraints
+2. select the strongest single available route
 3. use OpenAI as fallback
-4. add at most one reviewer when task risk/complexity justifies it
+4. add at most one reviewer when expected review value justifies latency/cost
 5. return one integrated answer
 
 ### Olympus
-Olympus is a council mode. Target behavior:
+Olympus is a deliberate council mode:
 1. compile the request
 2. choose 2 specialists, or 3 for heavier work
 3. allow at most 1 focused critic
 4. Director integrates disagreements
-5. return one answer, not pasted competing answers
+5. return one answer
 
-The foundation API does not yet claim to execute this council. Until provider/orchestration adapters are implemented, Olympus uses a transparent OpenAI foundation route.
+The current API does not claim real council execution yet. Until adapters/orchestration are implemented, Olympus degrades transparently to the OpenAI foundation route.
 
 ## Security boundary
 
-- Provider secrets are server-only environment variables.
-- Never expose provider keys through `VITE_*` variables.
-- Client payloads are schema validated server-side with Zod.
+- Provider secrets are server-only.
+- Supabase secret/service-role keys are never used in the browser.
+- `/api/chat` requires a verified Supabase bearer token.
+- Client payloads are validated server-side with Zod.
 - Client-controlled system prompts are not accepted.
-- Errors returned to clients are normalized; raw provider errors are logged server-side only.
+- Errors returned to clients are normalized.
 - Destructive or externally consequential actions will use PREPARE -> SHOW USER -> APPROVE -> EXECUTE -> VERIFY.
-- Authentication, authorization, rate limiting, billing, project persistence and RLS are required before public launch.
+- Public-schema tables use RLS and owner checks.
+- Privileged helper functions live in `app_private`, not `public`.
 
 ## Current stack
 
 - React + TypeScript
 - Vite
+- Supabase Auth + Postgres + RLS
 - Zod validation
-- Vercel server route for the current foundation
+- Vercel server functions
 - OpenAI Responses API foundation route
 
 ## Apple App Store path
 
-The React web foundation should be stable before native packaging is added. The expected packaging path is a native wrapper such as Capacitor, with bundle identity, Sign in with Apple requirements (if applicable), privacy disclosures, purchase/subscription rules, push notification entitlements and App Store review assets handled as a dedicated release phase.
+The React web foundation should be stable before native packaging is added. The expected packaging path is a native wrapper such as Capacitor, with bundle identity, Sign in with Apple requirements when applicable, privacy disclosures, purchase/subscription rules, push notification entitlements and App Store review assets handled as a dedicated release phase.
 
 Do not treat a responsive web build alone as App Store-ready.
 
 ## Definition of done before public beta
 
-- Authentication and account deletion
-- Per-user/project authorization
-- Supabase/Postgres persistence with RLS or equivalent
+- Authentication ✅
+- Per-user/project RLS ✅
+- Persistent Projects ✅
+- Persistent project conversations
+- Account deletion
 - Real file upload and secure object storage
 - Artifact persistence/versioning
+- Memory policy and provenance
 - Provider adapter registry and health/fallback rules
 - Zeus and Olympus orchestration implemented and traceable
 - Server-side quotas/rate limits
 - Usage/cost ledger
 - Privacy policy and terms
 - Observability and provider failure traces
-- Production CI with lockfile
+- Production CI with committed lockfile
 - End-to-end tests for chat, upload, projects and account isolation
