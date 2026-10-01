@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "smoke": "node scripts/smoke.mjs",
+    "test": "node --test",
     "e2e:isolation": "node scripts/e2e-isolation.mjs"
   },
   "dependencies": {

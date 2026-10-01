@@ -23,6 +23,8 @@ assert(
 );
 
 for (const path of [
+  "api/lib/storage-cleanup.js",
+  "scripts/account-storage-cleanup.test.mjs",
   "src/lib/memory.ts",
   "src/lib/projectFiles.ts",
   "src/lib/artifacts.ts",
@@ -115,8 +117,9 @@ const accountApi = readFileSync(resolve("api/account.js"), "utf8");
 assert(
   accountApi.includes("SUPABASE_SECRET_KEY") &&
     accountApi.includes("deleteUser") &&
-    accountApi.includes('from("project-files").remove'),
-  "Account deletion is not wired to private Storage cleanup + Auth deletion"
+    accountApi.includes('removeOwnedStorageObjects(client, "project-files"') &&
+    accountApi.includes('removeOwnedStorageObjects(client, "artifact-files"'),
+  "Account deletion must clean private Project and image-artifact Storage before Auth deletion"
 );
 
 

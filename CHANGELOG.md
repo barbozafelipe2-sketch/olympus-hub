@@ -33,6 +33,7 @@
 - Health reporting distinguishes configured services from live provider health.
 
 ### Security
+- Account deletion recursively removes owned objects from both `project-files` and `artifact-files`, including orphaned uploads.
 - Account deletion admin credential remains server-only.
 - Service worker refuses to cache authenticated API responses.
 - Quotas are checked before provider spend.
