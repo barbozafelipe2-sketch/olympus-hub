@@ -25,6 +25,26 @@ export type ApiTraceEntry = {
   fallbackFrom: string | null;
 };
 
+export type ApiCapabilityTrace = {
+  name: string;
+  status: string;
+  target?: string;
+  reason?: string;
+  artifactId?: string;
+  version?: number;
+  action?: string;
+  bytes?: number;
+};
+
+export type ApiArtifact = {
+  id: string;
+  title: string;
+  kind: string;
+  mimeType: string;
+  version: number;
+  action: string;
+};
+
 export type ApiOrchestration = {
   mode: ModeId;
   calls: number;
@@ -41,6 +61,8 @@ export type ApiChatResponse = {
   executionId: string | null;
   trace: ApiTraceEntry[];
   orchestration: ApiOrchestration;
+  artifact: ApiArtifact | null;
+  capabilities: ApiCapabilityTrace[];
 };
 
 export const MODES: Array<{
