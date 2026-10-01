@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 - Native iOS foundation
+
+### Added
+- Real React Native iOS app under `mobile/` using Expo SDK 57 and React Native 0.86; it is not a WebView wrapper.
+- Native authentication, durable chat with five modes, Project workspace, task management, approved memory, private Project file uploads, artifact sharing and account deletion.
+- Persistent Supabase auth session on device and Zod validation of native chat API responses.
+- EAS development/preview/production build profiles and a separate native setup/release guide.
+- CI gates for native TypeScript checking and iOS bundle export.
+
+### Release status
+- Expo SDK compatibility and Expo Doctor checks pass; signed-device QA, Apple identity, final bundle-ID registration, legal/privacy setup, business model/IAP and store metadata remain open.
+
 ## 0.5.1 - Continuity and capability hardening
 
 ### Fixed

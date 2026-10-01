@@ -1,6 +1,6 @@
 # OlyHub Commercial
 
-OlyHub is the commercial React product for customer distribution and eventual Apple App Store release.
+OlyHub is the commercial workspace with a React web/PWA client and a native React Native iOS app for Apple App Store distribution.
 
 > Repository boundary: this codebase is **not** the private `zeus-proxy` product. Personal prompts, private memory, credentials and unrestricted personal capabilities must not cross into this repository.
 
@@ -35,6 +35,7 @@ The target experience is: **“my work is already here and OlyHub already knows 
 - Persistent onboarding.
 - Honest configuration health endpoint at `/api/health`.
 - Installable PWA foundation with API responses excluded from service-worker caching.
+- Native iOS client under `mobile/`, built with Expo SDK 57 / React Native 0.86 (not a WebView wrapper): auth, persistent chats, five modes, Projects, tasks, approved memory, private file uploads, artifact sharing and account deletion.
 - Locked npm dependencies and main-only CI:
   `npm ci -> typecheck -> build -> smoke`.
 
@@ -89,6 +90,8 @@ Server-only:
 
 Never expose a Supabase secret/admin key or provider key through a `VITE_*` variable.
 
+The native app has a separate [mobile setup guide](mobile/README.md). Its `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `EXPO_PUBLIC_API_BASE_URL` are client-visible values. Provider keys and Supabase secret/admin keys remain server-only.
+
 ## Database
 
 Current commercial tables include:
@@ -120,7 +123,7 @@ CI runs on `main` and pull requests targeting `main`. `main` is the only active 
 
 ## Release status
 
-The web/PWA product is **not yet App Store-ready**. Native packaging, Apple Developer/App Store Connect identity, privacy/terms URLs, final business model/IAP configuration, native privacy manifest, store assets and executed staging/native E2E validation remain release gates. A two-user RLS isolation harness is already present but requires staging test credentials to run.
+The native iOS implementation now exists, but the product is **not yet App Store-ready**. A signed EAS build, Apple Developer/App Store Connect identity, privacy/terms URLs, final business model/IAP configuration, privacy-manifest review, store listing assets and executed staging/native E2E validation remain release gates. A two-user RLS isolation harness is already present but requires staging test credentials to run.
 
 See:
 - [Commercial architecture](docs/COMMERCIAL_ARCHITECTURE.md)
