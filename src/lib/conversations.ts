@@ -25,18 +25,6 @@ export async function getOrCreateProjectConversation(input: {
   if (lookupError) throw lookupError;
 
   if (existing) {
-    if (existing.mode !== input.mode) {
-      const { data: updated, error: updateError } = await client
-        .from("conversations")
-        .update({ mode: input.mode })
-        .eq("id", existing.id)
-        .select("*")
-        .single();
-
-      if (updateError) throw updateError;
-      return updated;
-    }
-
     return existing;
   }
 
