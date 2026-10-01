@@ -21,6 +21,8 @@ The target experience is: **“my work is already here and OlyHub already knows 
 - Durable Project tasks; Zeus/Olympus receive the current task state as context.
 - Private Project file upload/download/delete through Supabase Storage.
 - Capability Broker reading for private text, Markdown, CSV and JSON files when explicitly requested.
+- Live web research through the OpenAI Responses `web_search` tool when current/search intent is detected.
+- Persistent clickable web-source citations restored with conversation history.
 - Versioned artifacts in Home and Projects with download/delete and immutable revisions.
 - Direct OpenAI, Anthropic and Google AI provider adapters.
 - Zeus routing with OpenAI fallback and conditional reviewer/director flow.
@@ -76,6 +78,7 @@ Server-only:
 - `OPENAI_API_KEY`
 - `OPENAI_DEFAULT_MODEL` — optional
 - `OPENAI_FALLBACK_MODEL` — optional
+- `OPENAI_WEB_SEARCH_MODEL` — optional; defaults to `gpt-5.5` in code
 - `ANTHROPIC_API_KEY` — optional
 - `ANTHROPIC_MODEL` — optional
 - `GOOGLE_AI_API_KEY` — optional
@@ -117,7 +120,7 @@ CI runs on `main` and pull requests targeting `main`. `main` is the only active 
 
 ## Release status
 
-The web/PWA product is **not yet App Store-ready**. Native packaging, Apple Developer/App Store Connect identity, privacy/terms URLs, final business model/IAP configuration, native privacy manifest, store assets and runtime E2E/account-isolation testing remain release gates.
+The web/PWA product is **not yet App Store-ready**. Native packaging, Apple Developer/App Store Connect identity, privacy/terms URLs, final business model/IAP configuration, native privacy manifest, store assets and executed staging/native E2E validation remain release gates. A two-user RLS isolation harness is already present but requires staging test credentials to run.
 
 See:
 - [Commercial architecture](docs/COMMERCIAL_ARCHITECTURE.md)
