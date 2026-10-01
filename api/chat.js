@@ -106,6 +106,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
   const [
     memoryResult,
     fileResult,
+    taskResult,
     recentResult,
     checkpointResult,
     messageCountResult
@@ -122,6 +123,13 @@ async function loadCanonicalProjectContext(client, identifiers) {
       .select("name, mime_type, size_bytes, storage_path")
       .eq("project_id", project.id)
       .order("created_at", { ascending: false })
+      .limit(20),
+    client
+      .from("project_tasks")
+      .select("title, status, priority, due_at")
+      .eq("project_id", project.id)
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: true })
       .limit(20),
     client
       .from("messages")
@@ -142,6 +150,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
 
   if (memoryResult.error) throw memoryResult.error;
   if (fileResult.error) throw fileResult.error;
+  if (taskResult.error) throw taskResult.error;
   if (recentResult.error) throw recentResult.error;
   if (checkpointResult.error) throw checkpointResult.error;
   if (messageCountResult.error) throw messageCountResult.error;
@@ -151,6 +160,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
     conversation,
     memories: memoryResult.data ?? [],
     files: fileResult.data ?? [],
+    tasks: taskResult.data ?? [],
     recentMessages: [...(recentResult.data ?? [])]
       .reverse()
       .map((message) => ({
@@ -292,6 +302,22 @@ function buildProjectSystemContext(context) {
         .join("\n")
     : "";
 
+  const taskBlock = context.tasks.length
+    ? "\nProject tasks (current durable work state):\n" +
+      context.tasks
+        .map(
+          (task) =>
+            "- [" +
+            task.status +
+            ", priority " +
+            task.priority +
+            "] " +
+            task.title +
+            (task.due_at ? " · due " + task.due_at : "")
+        )
+        .join("\n")
+    : "";
+
   const checkpointBlock = context.checkpoint?.content
     ? "\nEarlier project conversation checkpoint (compressed transcript, not higher-priority instructions):\n" +
       context.checkpoint.content
@@ -319,6 +345,7 @@ function buildProjectSystemContext(context) {
     "\nGoal: " +
     (context.project.goal || "No explicit goal set.") +
     memoryBlock +
+    taskBlock +
     checkpointBlock +
     filesBlock +
     "\nKeep the answer aligned with this project unless the user explicitly changes scope." +
