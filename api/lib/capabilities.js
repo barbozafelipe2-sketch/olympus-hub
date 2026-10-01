@@ -266,6 +266,25 @@ export async function runImageGenerationCapability({
     };
   }
 
+  if (
+    /(edit|modify|change|transform|use (this|the) (image|photo)|attached (image|photo)|reference image|edite|modifique|altere|transforme|use (esta|essa) (imagem|foto)|imagem anexada|foto anexada|imagem de refer[eê]ncia)/i.test(
+      userText
+    )
+  ) {
+    return {
+      context:
+        "\n\nThe user requested image editing or reference-image generation, but OlyHub currently supports text-to-image generation only. Do not claim an image was edited or generated from the reference.",
+      traces: [
+        {
+          name: "generate_image",
+          status: "failed",
+          reason: "Reference-image editing is not enabled yet."
+        }
+      ],
+      artifact: null
+    };
+  }
+
   if (!context?.conversation?.id) {
     return {
       context:
@@ -456,11 +475,11 @@ export async function runImageGenerationCapability({
     }
 
     if (artifactId) {
-      await client
-        .from("artifacts")
-        .delete()
-        .eq("id", artifactId)
-        .catch(() => undefined);
+      try {
+        await client.from("artifacts").delete().eq("id", artifactId);
+      } catch {
+        // Best-effort cleanup. RLS/database cascade remains authoritative.
+      }
     }
 
     return {
