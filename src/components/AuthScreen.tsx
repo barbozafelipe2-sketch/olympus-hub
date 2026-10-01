@@ -1,5 +1,5 @@
 import { KeyRound, LogIn, ShieldCheck, UserPlus } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { requireSupabase } from "../lib/supabase";
 
 type AuthMode = "signin" | "signup";
