@@ -302,6 +302,8 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          onboarding_completed: boolean
+          onboarding_completed_at: string | null
           updated_at: string
         }
         Insert: {
@@ -309,6 +311,8 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id: string
+          onboarding_completed?: boolean
+          onboarding_completed_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -316,6 +320,8 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          onboarding_completed?: boolean
+          onboarding_completed_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -585,6 +591,7 @@ export type Database = {
           version_id: string
         }[]
       }
+      complete_my_onboarding: { Args: never; Returns: undefined }
       create_artifact_with_version: {
         Args: {
           p_content: string
