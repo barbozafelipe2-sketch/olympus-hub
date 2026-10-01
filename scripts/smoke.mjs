@@ -25,6 +25,7 @@ assert(
 for (const path of [
   "src/lib/memory.ts",
   "src/lib/projectFiles.ts",
+  "src/lib/artifacts.ts",
   "src/components/ProjectWorkspace.tsx",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
   "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
@@ -43,6 +44,7 @@ const projectWorkspace = readFileSync(
 assert(
   projectWorkspace.includes("addProjectMemory") &&
     projectWorkspace.includes("uploadProjectFiles") &&
+    projectWorkspace.includes("listProjectArtifacts") &&
     projectWorkspace.includes("projectId: project.id") &&
     projectWorkspace.includes("conversationId"),
   "Project workspace is not wired to memory/files/canonical context"
