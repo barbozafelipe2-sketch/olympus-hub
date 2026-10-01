@@ -123,3 +123,23 @@ See:
 - [Commercial architecture](docs/COMMERCIAL_ARCHITECTURE.md)
 - [Product strategy](docs/PRODUCT_STRATEGY.md)
 - [App Store release gates](docs/APP_STORE_RELEASE.md)
+
+
+## Staging account-isolation E2E
+
+A manual GitHub Actions workflow, `.github/workflows/e2e-staging.yml`, runs a two-user RLS isolation test without calling any AI provider.
+
+Required repository secrets:
+
+- `E2E_SUPABASE_URL`
+- `E2E_SUPABASE_PUBLISHABLE_KEY`
+- `E2E_USER_A_EMAIL`
+- `E2E_USER_A_PASSWORD`
+- `E2E_USER_B_EMAIL`
+- `E2E_USER_B_PASSWORD`
+
+The two test users must already exist and must be different accounts. The test creates temporary User A Project data, confirms User B cannot read or insert into that scope, then removes the temporary Project.
+
+Run locally with the same environment values:
+
+`npm run e2e:isolation`
