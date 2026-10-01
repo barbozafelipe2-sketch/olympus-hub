@@ -127,6 +127,10 @@ export default function App() {
     if (!user) {
       setProjects([]);
       setSelectedProject(null);
+      setHomeConversations([]);
+      setActiveHomeConversation(null);
+      setHomeArtifacts([]);
+      setMessages(initialMessages);
       setOnboardingComplete(null);
       return;
     }
@@ -147,6 +151,60 @@ export default function App() {
       })
       .finally(() => {
         if (active) setProjectsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    setHomeLoading(true);
+
+    void listHomeConversations()
+      .then(async (rows) => {
+        if (!active) return;
+
+        setHomeConversations(rows);
+        const latest = rows[0] ?? null;
+
+        if (!latest) {
+          setActiveHomeConversation(null);
+          setMessages(initialMessages);
+          setHomeArtifacts([]);
+          setMode("zeus");
+          return;
+        }
+
+        const [savedMessages, savedArtifacts] = await Promise.all([
+          loadConversationMessages(latest.id),
+          listConversationArtifacts(latest.id)
+        ]);
+
+        if (!active) return;
+
+        setActiveHomeConversation(latest);
+        setMessages(savedMessages.length > 0 ? savedMessages : initialMessages);
+        setHomeArtifacts(savedArtifacts);
+        setMode(
+          MODES.some((item) => item.id === latest.mode)
+            ? (latest.mode as ModeId)
+            : "zeus"
+        );
+      })
+      .catch((caught) => {
+        if (!active) return;
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Unable to restore Home conversations."
+        );
+      })
+      .finally(() => {
+        if (active) setHomeLoading(false);
       });
 
     return () => {
@@ -193,6 +251,111 @@ export default function App() {
     setSelectedProject(null);
     setView(next);
     setMobileNavOpen(false);
+  }
+
+  async function ensureHomeConversation(): Promise<ConversationRow> {
+    if (activeHomeConversation) return activeHomeConversation;
+
+    const conversation = await createHomeConversation({
+      ownerId: userId,
+      mode
+    });
+
+    setActiveHomeConversation(conversation);
+    setHomeConversations((current) => [conversation, ...current]);
+    return conversation;
+  }
+
+  async function openHomeConversation(conversation: ConversationRow) {
+    if (homeLoading || isSending) return;
+
+    setHomeLoading(true);
+    setError(null);
+    setRunMeta(null);
+    setSelectedProject(null);
+    setView("home");
+    setMobileNavOpen(false);
+
+    try {
+      const [savedMessages, savedArtifacts] = await Promise.all([
+        loadConversationMessages(conversation.id),
+        listConversationArtifacts(conversation.id)
+      ]);
+
+      setActiveHomeConversation(conversation);
+      setMessages(savedMessages.length > 0 ? savedMessages : initialMessages);
+      setHomeArtifacts(savedArtifacts);
+      setMode(
+        MODES.some((item) => item.id === conversation.mode)
+          ? (conversation.mode as ModeId)
+          : "zeus"
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to open this Home conversation."
+      );
+    } finally {
+      setHomeLoading(false);
+    }
+  }
+
+  async function newHomeChat() {
+    if (homeChatBusy || isSending) return;
+
+    setHomeChatBusy(true);
+    setError(null);
+    setRunMeta(null);
+
+    try {
+      const conversation = await createHomeConversation({
+        ownerId: userId,
+        mode: "zeus"
+      });
+
+      setHomeConversations((current) => [conversation, ...current]);
+      setActiveHomeConversation(conversation);
+      setMessages(initialMessages);
+      setHomeArtifacts([]);
+      setPrompt("");
+      setMode("zeus");
+      setSelectedProject(null);
+      setView("home");
+      setMobileNavOpen(false);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to create a new chat."
+      );
+    } finally {
+      setHomeChatBusy(false);
+    }
+  }
+
+  async function changeHomeMode(nextMode: ModeId) {
+    const previous = mode;
+    setMode(nextMode);
+
+    if (!activeHomeConversation) return;
+
+    try {
+      await setConversationMode(activeHomeConversation.id, nextMode);
+      setActiveHomeConversation((current) =>
+        current ? { ...current, mode: nextMode } : current
+      );
+      setHomeConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === activeHomeConversation.id
+            ? { ...conversation, mode: nextMode }
+            : conversation
+        )
+      );
+    } catch (caught) {
+      setMode(previous);
+      setError(
+        caught instanceof Error ? caught.message : "Unable to save chat mode."
+      );
+    }
   }
 
   async function submit() {
