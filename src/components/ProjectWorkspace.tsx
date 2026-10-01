@@ -42,6 +42,7 @@ import {
   deleteProjectFile,
   downloadProjectFile,
   listProjectFiles,
+  ProjectFileUploadError,
   uploadProjectFiles,
   type ProjectFileRow
 } from "../lib/projectFiles";
@@ -274,6 +275,10 @@ export function ProjectWorkspace({
       }
       onProjectTouched(project.id, touchedAt);
     } catch (caught) {
+      if (caught instanceof ProjectFileUploadError) {
+        const refreshedFiles = await listProjectFiles(project.id).catch(() => null);
+        if (refreshedFiles) setProjectFiles(refreshedFiles);
+      }
       setError(
         caught instanceof Error
           ? "File upload failed: " + caught.message
@@ -913,8 +918,9 @@ export function ProjectWorkspace({
               )}
             </div>
             <p className="rail-footnote">
-              Private text, Markdown, CSV and JSON files can be read by the Capability
-              Broker when you ask for them. Other file types remain metadata-only.
+              Upload up to 8 private files at a time, up to 20 MB each. Zeus and
+              Olympus can read text, Markdown, CSV and JSON files up to 1 MB;
+              other formats are stored for download only.
             </p>
           </section>
 

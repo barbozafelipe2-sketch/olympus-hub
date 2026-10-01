@@ -6,6 +6,17 @@ export type ProjectFileRow =
 
 const BUCKET = "project-files";
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILES_PER_UPLOAD = 8;
+
+export class ProjectFileUploadError extends Error {
+  constructor(
+    message: string,
+    readonly uploadedCount: number
+  ) {
+    super(message);
+    this.name = "ProjectFileUploadError";
+  }
+}
 
 function cleanFileName(name: string) {
   return name
@@ -31,10 +42,11 @@ export async function uploadProjectFiles(input: {
   projectId: string;
   files: File[];
 }): Promise<ProjectFileRow[]> {
-  const client = requireSupabase();
-  const uploaded: ProjectFileRow[] = [];
+  if (input.files.length > MAX_FILES_PER_UPLOAD) {
+    throw new Error("Select up to 8 project files per upload.");
+  }
 
-  for (const file of input.files.slice(0, 8)) {
+  for (const file of input.files) {
     if (file.size > MAX_FILE_BYTES) {
       throw new Error(file.name + " is larger than the 20 MB project-file limit.");
     }
@@ -42,43 +54,59 @@ export async function uploadProjectFiles(input: {
     if (!file.type) {
       throw new Error(file.name + " has an unsupported or unknown file type.");
     }
+  }
 
-    const safeName = cleanFileName(file.name);
-    const storagePath =
-      input.ownerId + "/" +
-      input.projectId + "/" +
-      crypto.randomUUID() + "-" + safeName;
-    const mimeType = file.type;
+  const client = requireSupabase();
+  const uploaded: ProjectFileRow[] = [];
 
-    const { error: uploadError } = await client.storage
-      .from(BUCKET)
-      .upload(storagePath, file, {
-        cacheControl: "3600",
-        contentType: mimeType,
-        upsert: false
-      });
+  for (const file of input.files) {
+    try {
+      const safeName = cleanFileName(file.name);
+      const storagePath =
+        input.ownerId + "/" +
+        input.projectId + "/" +
+        crypto.randomUUID() + "-" + safeName;
+      const mimeType = file.type;
 
-    if (uploadError) throw uploadError;
+      const { error: uploadError } = await client.storage
+        .from(BUCKET)
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: mimeType,
+          upsert: false
+        });
 
-    const { data: metadata, error: metadataError } = await client
-      .from("project_files")
-      .insert({
-        owner_id: input.ownerId,
-        project_id: input.projectId,
-        storage_path: storagePath,
-        name: safeName,
-        mime_type: mimeType,
-        size_bytes: file.size
-      })
-      .select("*")
-      .single();
+      if (uploadError) throw uploadError;
 
-    if (metadataError) {
-      await client.storage.from(BUCKET).remove([storagePath]).catch(() => undefined);
-      throw metadataError;
+      const { data: metadata, error: metadataError } = await client
+        .from("project_files")
+        .insert({
+          owner_id: input.ownerId,
+          project_id: input.projectId,
+          storage_path: storagePath,
+          name: safeName,
+          mime_type: mimeType,
+          size_bytes: file.size
+        })
+        .select("*")
+        .single();
+
+      if (metadataError) {
+        await client.storage.from(BUCKET).remove([storagePath]).catch(() => undefined);
+        throw metadataError;
+      }
+
+      uploaded.push(metadata);
+    } catch (caught) {
+      if (uploaded.length > 0) {
+        throw new ProjectFileUploadError(
+          "Upload stopped after " + uploaded.length + " of " + input.files.length +
+            " files. Completed files were kept in this Project.",
+          uploaded.length
+        );
+      }
+      throw caught;
     }
-
-    uploaded.push(metadata);
   }
 
   return uploaded;
