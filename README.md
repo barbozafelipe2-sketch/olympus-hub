@@ -15,7 +15,8 @@ OlyHub is the commercial React product for customer distribution and eventual Ap
 - Retry without duplicating saved user messages
 - Responsive Home chat shell
 - Five product modes: Zeus, Olympus, OpenAI, Claude and Google AI
-- File selection UI
+- Approved Project memory with 40-item / 15k-character database limits
+- Real private Project file upload/download/delete through Supabase Storage
 - Artifact rail
 - Server-only AI route protected by a verified Supabase user session
 - Validated Project context sent server-side
@@ -25,7 +26,7 @@ OlyHub is the commercial React product for customer distribution and eventual Ap
 - GitHub CI: `npm ci -> typecheck -> build -> smoke`
 - Database migrations tracked under `supabase/migrations`
 
-The current foundation is intentionally honest about what is not implemented yet: real file transport/storage, artifact generation/persistence, billing, account deletion, real Claude/Google adapters, long-history compaction and true Olympus council execution.
+The current foundation is intentionally honest about what is not implemented yet: model/tool reading of stored file contents, artifact generation/persistence, billing, account deletion, real Claude/Google adapters, long-history compaction and true Olympus council execution.
 
 ## Environment
 
@@ -76,6 +77,8 @@ The connected commercial Supabase project has:
 - `conversations`
 - `messages`
 - `project_tasks`
+- `project_memories`
+- `project_files`
 
 All exposed tables have RLS enabled. Policies restrict rows to `auth.uid()` ownership and dependent rows validate their parent project/conversation ownership.
 
@@ -88,3 +91,12 @@ React foundation merge: `78c42f734f9d0b720c8a75311462ae8ed742796d`.
 Supabase/auth foundation merge: `0c9dd6c62b49e923fd6f043ed9ab06fe3b4e214f`.
 
 For later changes, use Git history on `main`; no parallel commercial feature branch is treated as active.
+
+
+## Project memory
+
+Project memory is explicit and user-controlled. Each project scope is limited by the database to 40 items and 15,000 total characters. Entries are ranked by importance and recency, deduplicated, and only approved entries are sent as memory context.
+
+## Project files
+
+Project files use the private `project-files` Supabase Storage bucket. Object paths are `<user-id>/<project-id>/<object>`, and Storage RLS checks both the authenticated user and project ownership. The current chat receives file metadata only and is instructed not to claim that file contents were read.
