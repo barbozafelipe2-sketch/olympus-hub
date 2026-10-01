@@ -28,7 +28,10 @@ for (const path of [
   "src/components/ProjectWorkspace.tsx",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
   "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
-  "supabase/migrations/20261001153000_durable_execution_traces.sql"
+  "supabase/migrations/20261001152742_durable_execution_traces.sql",
+  "supabase/migrations/20261001153147_artifact_engine_foundation.sql",
+  "supabase/migrations/20261001153233_index_artifacts_conversation.sql",
+  "api/lib/capabilities.js"
 ]) {
   assert(existsSync(resolve(path)), path + " is missing");
 }
@@ -57,6 +60,14 @@ assert(
 for (const path of ["api/lib/providers.js", "api/lib/orchestrator.js"]) {
   assert(existsSync(resolve(path)), path + " is missing");
 }
+
+const capabilities = readFileSync(resolve("api/lib/capabilities.js"), "utf8");
+assert(
+  capabilities.includes("readRequestedProjectFiles") &&
+    capabilities.includes("persistRequestedArtifact") &&
+    capabilities.includes("create_artifact_with_version"),
+  "Capability Broker / Artifact Engine is not wired"
+);
 
 const orchestrator = readFileSync(resolve("api/lib/orchestrator.js"), "utf8");
 assert(
