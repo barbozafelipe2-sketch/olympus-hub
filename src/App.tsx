@@ -40,6 +40,10 @@ type RunMeta = {
   model: string;
   fallbackUsed: boolean;
   requestId: string;
+  calls: number;
+  multiProvider: boolean;
+  degraded: boolean;
+  route: string;
 } | null;
 
 const initialMessages: ChatMessage[] = [
@@ -216,7 +220,11 @@ export default function App() {
         provider: result.provider,
         model: result.model,
         fallbackUsed: result.fallbackUsed,
-        requestId: result.requestId
+        requestId: result.requestId,
+        calls: result.orchestration.calls,
+        multiProvider: result.orchestration.multiProvider,
+        degraded: result.orchestration.degraded,
+        route: [...new Set(result.trace.map((entry) => entry.provider))].join(" → ")
       });
     } catch (err) {
       const message =
@@ -560,8 +568,24 @@ export default function App() {
                       <dd>{runMeta.model}</dd>
                     </div>
                     <div>
+                      <dt>Calls</dt>
+                      <dd>{runMeta.calls}</dd>
+                    </div>
+                    <div>
+                      <dt>Route</dt>
+                      <dd title={runMeta.route}>{runMeta.route || runMeta.provider}</dd>
+                    </div>
+                    <div>
+                      <dt>Multi-provider</dt>
+                      <dd>{runMeta.multiProvider ? "Yes" : "No"}</dd>
+                    </div>
+                    <div>
                       <dt>Fallback</dt>
                       <dd>{runMeta.fallbackUsed ? "Used" : "No"}</dd>
+                    </div>
+                    <div>
+                      <dt>Degraded</dt>
+                      <dd>{runMeta.degraded ? "Yes" : "No"}</dd>
                     </div>
                     <div>
                       <dt>Request</dt>
