@@ -39,12 +39,16 @@ export async function uploadProjectFiles(input: {
       throw new Error(file.name + " is larger than the 20 MB project-file limit.");
     }
 
+    if (!file.type) {
+      throw new Error(file.name + " has an unsupported or unknown file type.");
+    }
+
     const safeName = cleanFileName(file.name);
     const storagePath =
       input.ownerId + "/" +
       input.projectId + "/" +
       crypto.randomUUID() + "-" + safeName;
-    const mimeType = file.type || "application/octet-stream";
+    const mimeType = file.type;
 
     const { error: uploadError } = await client.storage
       .from(BUCKET)
