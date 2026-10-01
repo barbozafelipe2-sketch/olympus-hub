@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
+  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -11,6 +13,9 @@ import { router } from "expo-router";
 import { Button, BrandMark, C, Card, s } from "@/ui";
 import { requireSupabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+
+const privacyPolicyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL?.trim();
+const termsUrl = process.env.EXPO_PUBLIC_TERMS_URL?.trim();
 
 export default function AuthScreen() {
   const { configured } = useAuth();
@@ -248,6 +253,49 @@ export default function AuthScreen() {
             loading={busy}
             style={{ marginTop: 2 }}
           />
+          <Text
+            style={{
+              color: C.dim,
+              fontSize: 12,
+              textAlign: "center",
+              lineHeight: 18,
+              marginTop: 2,
+            }}
+          >
+            {creating
+              ? "OlyHub stores account and workspace data to provide the service. AI providers receive your prompts only after you allow AI processing."
+              : "Your account and work data are handled under OlyHub’s privacy practices."}
+          </Text>
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: 18 }}>
+            {privacyPolicyUrl?.startsWith("https://") ? (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL(privacyPolicyUrl)}
+                hitSlop={8}
+              >
+                <Text style={{ color: C.gold, fontWeight: "700", fontSize: 13 }}>
+                  Privacy Policy
+                </Text>
+              </Pressable>
+            ) : null}
+            {termsUrl?.startsWith("https://") ? (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL(termsUrl)}
+                hitSlop={8}
+              >
+                <Text style={{ color: C.gold, fontWeight: "700", fontSize: 13 }}>
+                  Terms of Use
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {(!privacyPolicyUrl?.startsWith("https://") ||
+            !termsUrl?.startsWith("https://")) && (
+            <Text style={{ color: C.red, textAlign: "center", fontSize: 11 }}>
+              Legal links must be configured before App Store release.
+            </Text>
+          )}
           <Text
             style={{
               color: C.dim,

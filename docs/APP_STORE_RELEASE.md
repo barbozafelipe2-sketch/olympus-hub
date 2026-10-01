@@ -45,9 +45,14 @@ Apple requires a Privacy Policy URL for iOS apps and App Store Connect privacy a
 OlyHub still needs:
 - public Privacy Policy URL
 - actual commercial entity/contact identity in the policy
-- data categories mapped to OlyHub/Supabase/provider behavior
 - retention and deletion language matching the implemented Delete Account flow
 - App Store Connect privacy questionnaire completed from actual production behavior
+- confirmation that privacy choices and AI-provider disclosures match all production vendors
+
+Native progress:
+- A source-based data map is maintained in `docs/PRIVACY_DATA_MAP.md`.
+- Native first-use AI consent names the supported providers and request context; users may decline and can revoke in Settings. Consent is versioned and stored per account on-device.
+- Privacy Policy and Terms links are wired into native authentication, AI consent and Settings, but their production URLs are not configured yet.
 
 Official references:
 - https://developer.apple.com/help/app-store-connect/reference/app-information/app-privacy
@@ -56,7 +61,7 @@ Official references:
 
 ### 3. Native privacy manifest
 
-Implemented in `mobile/app.json`: Expo generates `ios/OlyHub/PrivacyInfo.xcprivacy` with no tracking and currently declares email, optional name, user ID, user content, and usage data for app functionality. It is included in the CI-generated native project.
+Implemented in `mobile/app.json`: Expo generates `ios/OlyHub/PrivacyInfo.xcprivacy` with no tracking and declares account identity, user content, optional photos/videos/audio, research search history, and usage data for app functionality. It is included in the CI-generated native project.
 
 Before submission:
 - Compare these declarations with production data flows and the final Privacy Policy / App Store privacy answers.

@@ -1,11 +1,27 @@
 import { useState } from "react";
-import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { router } from "expo-router";
 import { Button, BrandMark, C, Card, Screen } from "@/ui";
 import { requireSupabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import {
+  grantAiProviderConsent,
+  hasAiProviderConsent,
+  revokeAiProviderConsent,
+} from "@/lib/ai-consent";
+import { AiDataConsentModal } from "@/components/AiDataConsentModal";
 
 const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
+const privacyPolicyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL?.trim();
 
 export default function SettingsScreen() {
   const { session } = useAuth();
@@ -13,6 +29,16 @@ export default function SettingsScreen() {
   const [phrase, setPhrase] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentActive, setConsentActive] = useState(() =>
+    session?.user.id ? hasAiProviderConsent(session.user.id) : false,
+  );
+
+  function refreshConsentStatus() {
+    setConsentActive(
+      session?.user.id ? hasAiProviderConsent(session.user.id) : false,
+    );
+  }
 
   async function signOut() {
     const { error: signOutError } = await requireSupabase().auth.signOut();
@@ -72,7 +98,10 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <View style={{ flex: 1, padding: 20, gap: 16 }}>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, padding: 20, gap: 16 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={{ marginBottom: 4 }}>
           <Text style={{ color: C.text, fontSize: 25, fontWeight: "800" }}>
             Settings
@@ -113,6 +142,61 @@ export default function SettingsScreen() {
             and row-level security. OlyHub’s commercial workspace is separate
             from Zeus Proxy.
           </Text>
+        </Card>
+        <Card style={{ gap: 10 }}>
+          <Text style={{ color: C.text, fontWeight: "800", fontSize: 16 }}>
+            AI provider data sharing
+          </Text>
+          <Text style={{ color: C.muted, lineHeight: 21 }}>
+            {consentActive
+              ? "You allow OlyHub on this device to send relevant prompts and Project context to the AI providers described in the consent notice."
+              : "OlyHub will ask before sending a prompt or relevant Project context to an AI provider."}
+          </Text>
+          {consentActive ? (
+            <Button
+              title="Withdraw AI processing consent"
+              kind="secondary"
+              onPress={() => {
+                Alert.alert(
+                  "Withdraw AI consent?",
+                  "Future AI requests on this device will pause until you allow processing again. Your saved chats and Project data will remain in your account.",
+                  [
+                    { text: "Keep consent", style: "cancel" },
+                    {
+                      text: "Withdraw",
+                      style: "destructive",
+                      onPress: () => {
+                        if (session?.user.id)
+                          revokeAiProviderConsent(session.user.id);
+                        setConsentActive(false);
+                      },
+                    },
+                  ],
+                );
+              }}
+            />
+          ) : (
+            <Button
+              title="Review AI data sharing"
+              kind="secondary"
+              onPress={() => setConsentOpen(true)}
+            />
+          )}
+          {privacyPolicyUrl?.startsWith("https://") ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(privacyPolicyUrl)}
+              style={{ paddingVertical: 6 }}
+            >
+              <Text style={{ color: C.gold, fontWeight: "700" }}>
+                Privacy Policy
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={{ color: C.red, fontSize: 12, lineHeight: 18 }}>
+              Privacy Policy URL is not configured in this build.
+            </Text>
+          )}
         </Card>
         <View style={{ flex: 1 }} />
         <Button
@@ -200,7 +284,17 @@ export default function SettingsScreen() {
             </View>
           </View>
         </Modal>
-      </View>
+        <AiDataConsentModal
+          visible={consentOpen}
+          onDismiss={() => setConsentOpen(false)}
+          onAccept={() => {
+            if (!session?.user.id) return;
+            grantAiProviderConsent(session.user.id);
+            setConsentOpen(false);
+            refreshConsentStatus();
+          }}
+        />
+      </ScrollView>
     </Screen>
   );
 }

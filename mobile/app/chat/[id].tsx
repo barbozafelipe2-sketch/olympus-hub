@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
+import { hasAiProviderConsent, grantAiProviderConsent } from "@/lib/ai-consent";
+import { AiDataConsentModal } from "@/components/AiDataConsentModal";
 import {
   getConversation,
   getMessages,
@@ -50,6 +52,7 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [runLabel, setRunLabel] = useState("");
+  const [consentOpen, setConsentOpen] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const activeMode = useMemo(
     () => modes.find((item) => item.id === mode) ?? modes[0],
@@ -109,6 +112,10 @@ export default function ChatScreen() {
     const content = prompt.trim();
     if (!content || sending || loading || !session?.user.id || !conversation)
       return;
+    if (!hasAiProviderConsent(session.user.id)) {
+      setConsentOpen(true);
+      return;
+    }
     setPrompt("");
     setError("");
     setRunLabel("");
@@ -616,6 +623,16 @@ export default function ChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+      <AiDataConsentModal
+        visible={consentOpen}
+        onDismiss={() => setConsentOpen(false)}
+        onAccept={() => {
+          if (!session?.user.id) return;
+          grantAiProviderConsent(session.user.id);
+          setConsentOpen(false);
+          void submit();
+        }}
+      />
     </Screen>
   );
 }

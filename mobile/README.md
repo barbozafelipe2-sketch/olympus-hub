@@ -13,7 +13,7 @@ This is the native OlyHub application built with Expo SDK 57 and React Native 0.
 
 ## Configure local development
 
-1. Copy `.env.example` to `.env` and set the public Supabase URL, publishable key and HTTPS API origin.
+1. Copy `.env.example` to `.env` and set the public Supabase URL, publishable key, HTTPS API origin, public Privacy Policy URL and Terms of Use URL.
 2. Run `npm ci` from `mobile/`.
 3. Run `npm run start` from `mobile/`, then open the project in Expo Go or a development build.
 4. Run `npm run typecheck`, `npm run doctor` and `npx expo export --platform ios --output-dir dist/ios` before changes are considered verified.
@@ -24,7 +24,7 @@ The API origin must serve `/api/chat` and `/api/account` from the commercial Oly
 
 - `com.olyhub.app` is a provisional bundle identifier and must be confirmed as available and registered to the correct Apple Developer team before signing.
 - Link the project using `npx eas-cli@latest init` after signing in to the OlyHub Expo account.
-- Configure the three `EXPO_PUBLIC_*` variables in EAS Development, Preview and Production environments.
+- Configure all five `EXPO_PUBLIC_*` variables in EAS Development, Preview and Production environments.
 - Create an iOS development build with `npx eas-cli@latest build --platform ios --profile development`.
 - After native QA and all release gates pass, produce a store build with `npx eas-cli@latest build --platform ios --profile production` and submit through App Store Connect.
 
