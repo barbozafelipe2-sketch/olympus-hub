@@ -60,6 +60,7 @@ export type ApiArtifact = {
   mimeType: string;
   version: number;
   action: string;
+  previewUrl?: string | null;
 };
 
 export type ApiOrchestration = {
