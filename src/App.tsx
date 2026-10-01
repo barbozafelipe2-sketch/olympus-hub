@@ -1,6 +1,7 @@
 import {
   Archive,
   ChevronDown,
+  Download,
   FolderKanban,
   Home,
   LogOut,
@@ -10,6 +11,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
   X
 } from "lucide-react";
@@ -20,6 +22,22 @@ import { ProjectWorkspace } from "./components/ProjectWorkspace";
 import { SettingsView } from "./components/SettingsView";
 import { useAuth } from "./hooks/useAuth";
 import { sendChat } from "./lib/api";
+import {
+  deleteArtifact,
+  downloadArtifact,
+  listConversationArtifacts,
+  type ArtifactRow
+} from "./lib/artifacts";
+import {
+  createHomeConversation,
+  listHomeConversations,
+  loadConversationMessages,
+  persistMessage,
+  renameConversation,
+  setConversationMode,
+  touchConversation,
+  type ConversationRow
+} from "./lib/conversations";
 import {
   archiveProject,
   createProject,
@@ -79,6 +97,12 @@ export default function App() {
   const [mode, setMode] = useState<ModeId>("zeus");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [prompt, setPrompt] = useState("");
+  const [homeConversations, setHomeConversations] = useState<ConversationRow[]>([]);
+  const [activeHomeConversation, setActiveHomeConversation] =
+    useState<ConversationRow | null>(null);
+  const [homeArtifacts, setHomeArtifacts] = useState<ArtifactRow[]>([]);
+  const [homeLoading, setHomeLoading] = useState(false);
+  const [homeChatBusy, setHomeChatBusy] = useState(false);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(false);
