@@ -194,7 +194,7 @@ export default function App() {
 
     try {
       const result = await sendChat(
-        { messages: nextMessages, mode },
+        { messages: nextMessages.slice(-40), mode },
         controller.signal
       );
 
