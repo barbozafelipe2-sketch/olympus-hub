@@ -19,7 +19,7 @@
 - Complete account deletion with private Storage cleanup.
 - Configuration-only health endpoint.
 - PWA manifest, production service worker and install metadata.
-- Native-sized 180px Apple touch icon and 192/512px PNG install icons, precached by the service worker.
+- iOS home-screen 180px Apple touch icon and 192/512px PNG PWA install icons, precached by the service worker.
 - Capability Broker text/Markdown/CSV/JSON Project file reading.
 - Live web research capability using hosted OpenAI web search.
 - Persistent clickable web-source citations in Home and Projects.

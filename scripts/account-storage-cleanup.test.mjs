@@ -84,6 +84,33 @@ test("fails closed when listing fails and does not attempt deletion", async () =
   assert.deepEqual(removed, []);
 });
 
+test("fails closed when Storage removal fails", async () => {
+  const { client, removed } = mockClient(
+    {
+      [owner]: [{ name: "private-file", id: "object-1", metadata: { size: 1 } }]
+    },
+    { removeError: new Error("remove denied") }
+  );
+
+  await assert.rejects(
+    removeOwnedStorageObjects(client, "project-files", owner),
+    /remove denied/
+  );
+  assert.deepEqual(removed, []);
+});
+
+test("rejects path separators returned by Storage listing", async () => {
+  const { client, removed } = mockClient({
+    [owner]: [{ name: "../other-user/private.png", id: "object-1", metadata: { size: 1 } }]
+  });
+
+  await assert.rejects(
+    removeOwnedStorageObjects(client, "artifact-files", owner),
+    /invalid path/
+  );
+  assert.deepEqual(removed, []);
+});
+
 test("rejects unknown buckets and invalid owner ids", async () => {
   const { client, removed } = mockClient({});
 
