@@ -2,101 +2,124 @@
 
 OlyHub is the commercial React product for customer distribution and eventual Apple App Store release.
 
-> Repository boundary: this codebase is **not** the private `zeus-proxy` product. Personal prompts, memory, credentials and unrestricted admin capabilities must not cross into this repository.
+> Repository boundary: this codebase is **not** the private `zeus-proxy` product. Personal prompts, private memory, credentials and unrestricted personal capabilities must not cross into this repository.
 
-## Current foundation
+## Product thesis
 
-- React + TypeScript + Vite
-- Supabase Auth
-- Per-user Row Level Security
-- Persistent Projects
-- One durable conversation per Project
-- Persistent Project message history
-- Retry without duplicating saved user messages
-- Responsive Home chat shell
-- Five product modes: Zeus, Olympus, OpenAI, Claude and Google AI
-- Approved Project memory with 40-item / 15k-character database limits
-- Real private Project file upload/download/delete through Supabase Storage
-- Artifact rail
-- Server-only AI route protected by a verified Supabase user session
-- Validated Project context sent server-side
-- Zod request validation
-- OpenAI fallback foundation
-- Locked npm dependencies
-- GitHub CI: `npm ci -> typecheck -> build -> smoke`
-- Database migrations tracked under `supabase/migrations`
+OlyHub is not trying to own a better foundation model than OpenAI, Anthropic or Google. It owns the user's working continuity: conversations, Projects, approved memory, private files, tasks, artifacts and execution traces.
 
-The current foundation is intentionally honest about what is not implemented yet: model/tool reading of stored file contents, artifact generation/persistence, billing, account deletion, real Claude/Google adapters, long-history compaction and true Olympus council execution.
+The target experience is: **“my work is already here and OlyHub already knows what to do next.”**
+
+## What works now
+
+- React + TypeScript + Vite.
+- Supabase Auth with per-user Row Level Security.
+- Persistent Home conversations with recent-chat restoration.
+- Persistent Projects with one durable conversation per Project.
+- Deterministic long-history Project checkpoints plus recent canonical messages loaded server-side.
+- Approved Project memory with database limits: 40 items / 15,000 characters per scope.
+- Durable Project tasks; Zeus/Olympus receive the current task state as context.
+- Private Project file upload/download/delete through Supabase Storage.
+- Capability Broker reading for private text, Markdown, CSV and JSON files when explicitly requested.
+- Versioned artifacts in Home and Projects with download/delete and immutable revisions.
+- Direct OpenAI, Anthropic and Google AI provider adapters.
+- Zeus routing with OpenAI fallback and conditional reviewer/director flow.
+- Olympus multi-call specialist + critic + Director flow.
+- Durable execution traces with exact provider/model/request routing.
+- Provider-reported token usage aggregated across every orchestration call.
+- Server-side usage ledger and configurable account/global quotas.
+- Settings surface for usage, plan state and account limits.
+- Complete server-side account deletion including private Storage cleanup.
+- Persistent onboarding.
+- Honest configuration health endpoint at `/api/health`.
+- Installable PWA foundation with API responses excluded from service-worker caching.
+- Locked npm dependencies and main-only CI:
+  `npm ci -> typecheck -> build -> smoke`.
+
+## Capability boundary
+
+Project file content is currently readable only for:
+
+- `text/plain`
+- `text/markdown`
+- `text/csv`
+- `application/json`
+
+PDF, DOCX, XLSX, PPTX, images, audio and video can be stored privately but are not yet parsed by the AI capability layer. OlyHub must not claim those contents were read.
+
+Home supports persistent conversations and versioned artifacts. Persistent file storage, approved memory, tasks and a durable goal belong to Projects.
+
+## Provider behavior
+
+OpenAI is the required fallback provider.
+
+- Direct OpenAI -> OpenAI.
+- Direct Claude -> Anthropic when available, otherwise OpenAI fallback.
+- Direct Google AI -> Google when available, otherwise OpenAI fallback.
+- Zeus chooses a route and may add one reviewer for higher-value review cases.
+- Olympus uses multiple specialist calls plus a focused critic and Director when providers are available.
+
+The UI trace describes what actually ran. Configured credentials are not described as live provider health.
 
 ## Environment
 
-Browser-safe Supabase values:
+Browser-safe:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-Server values:
+Server-only:
 
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY` — required for complete account deletion
 - `OPENAI_API_KEY`
 - `OPENAI_DEFAULT_MODEL` — optional
 - `OPENAI_FALLBACK_MODEL` — optional
-- `ALLOWED_ORIGIN` — reserved for native/cross-origin hardening
+- `ANTHROPIC_API_KEY` — optional
+- `ANTHROPIC_MODEL` — optional
+- `GOOGLE_AI_API_KEY` — optional
+- `GOOGLE_AI_MODEL` — optional
+- `OLYHUB_DAILY_REQUEST_LIMIT` — optional global safety limit
+- `OLYHUB_DAILY_TOKEN_LIMIT` — optional global safety limit
+- `OLYHUB_MONTHLY_TOKEN_LIMIT` — optional global safety limit
 
-Never expose a Supabase secret/service-role key or provider API key through a `VITE_*` variable.
-
-## Local development
-
-1. Install locked dependencies:
-   `npm ci`
-2. Copy environment template:
-   `cp .env.example .env.local`
-3. Configure the browser-safe Supabase values and server-side AI values.
-4. Run the Vercel development runtime so `/api/chat` is available.
-
-## Validation
-
-- `npm run typecheck`
-- `npm run build`
-- `npm run smoke`
-
-CI runs on `main` and on pull requests targeting `main`.
-
-## Architecture
-
-- [Commercial architecture](docs/COMMERCIAL_ARCHITECTURE.md)
-- [Product strategy](docs/PRODUCT_STRATEGY.md)
+Never expose a Supabase secret/admin key or provider key through a `VITE_*` variable.
 
 ## Database
 
-The connected commercial Supabase project has:
+Current commercial tables include:
 
 - `profiles`
 - `projects`
 - `conversations`
 - `messages`
+- `conversation_checkpoints`
 - `project_tasks`
 - `project_memories`
 - `project_files`
+- `artifacts`
+- `artifact_versions`
+- `executions`
+- `account_limits`
+- `usage_events`
 
-All exposed tables have RLS enabled. Policies restrict rows to `auth.uid()` ownership and dependent rows validate their parent project/conversation ownership.
+All exposed product tables have RLS enabled.
 
-Projects currently use one durable conversation each, enforced by a partial unique index on `conversations.project_id`.
+## Validation
 
-## Rollback
+- `npm ci`
+- `npm run typecheck`
+- `npm run build`
+- `npm run smoke`
 
-React foundation merge: `78c42f734f9d0b720c8a75311462ae8ed742796d`.
+CI runs on `main` and pull requests targeting `main`. `main` is the only active commercial development line.
 
-Supabase/auth foundation merge: `0c9dd6c62b49e923fd6f043ed9ab06fe3b4e214f`.
+## Release status
 
-For later changes, use Git history on `main`; no parallel commercial feature branch is treated as active.
+The web/PWA product is **not yet App Store-ready**. Native packaging, Apple Developer/App Store Connect identity, privacy/terms URLs, final business model/IAP configuration, native privacy manifest, store assets and runtime E2E/account-isolation testing remain release gates.
 
-
-## Project memory
-
-Project memory is explicit and user-controlled. Each project scope is limited by the database to 40 items and 15,000 total characters. Entries are ranked by importance and recency, deduplicated, and only approved entries are sent as memory context.
-
-## Project files
-
-Project files use the private `project-files` Supabase Storage bucket. Object paths are `<user-id>/<project-id>/<object>`, and Storage RLS checks both the authenticated user and project ownership. The current chat receives file metadata only and is instructed not to claim that file contents were read.
+See:
+- [Commercial architecture](docs/COMMERCIAL_ARCHITECTURE.md)
+- [Product strategy](docs/PRODUCT_STRATEGY.md)
+- [App Store release gates](docs/APP_STORE_RELEASE.md)
