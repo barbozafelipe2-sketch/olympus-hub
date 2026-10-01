@@ -5,18 +5,8 @@ type SendChatInput = {
   messages: ChatMessage[];
   mode: ModeId;
   projectContext?: {
-    name: string;
-    goal: string;
-    memories?: Array<{
-      kind: string;
-      content: string;
-      importance: number;
-    }>;
-    files?: Array<{
-      name: string;
-      mimeType: string;
-      sizeBytes: number;
-    }>;
+    projectId: string;
+    conversationId: string;
   };
 };
 
