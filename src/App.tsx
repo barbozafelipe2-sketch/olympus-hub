@@ -13,7 +13,7 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
 import { Onboarding } from "./components/Onboarding";
 import { ProjectWorkspace } from "./components/ProjectWorkspace";
@@ -62,12 +62,6 @@ const initialMessages: ChatMessage[] = [
 
 function makeId() {
   return crypto.randomUUID();
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 function formatUpdatedAt(value: string) {
