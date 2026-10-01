@@ -114,6 +114,104 @@ export type Database = {
         }
         Relationships: []
       }
+      project_files: {
+        Row: {
+          bucket_id: string
+          created_at: string
+          id: string
+          mime_type: string
+          name: string
+          owner_id: string
+          project_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          bucket_id?: string
+          created_at?: string
+          id?: string
+          mime_type: string
+          name: string
+          owner_id: string
+          project_id: string
+          size_bytes: number
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          bucket_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string
+          name?: string
+          owner_id?: string
+          project_id?: string
+          size_bytes?: number
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_memories: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          importance: number
+          kind: string
+          owner_id: string
+          project_id: string | null
+          source_message_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          importance?: number
+          kind?: string
+          owner_id: string
+          project_id?: string | null
+          source_message_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          importance?: number
+          kind?: string
+          owner_id?: string
+          project_id?: string | null
+          source_message_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_memories_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_memories_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_tasks: {
         Row: {
           created_at: string
