@@ -21,7 +21,6 @@ import {
 } from "../lib/conversations";
 import {
   addProjectMemory,
-  buildMemoryContext,
   deleteProjectMemory,
   listProjectMemories,
   type MemoryKind,
@@ -298,14 +297,8 @@ export function ProjectWorkspace({
         {
           mode,
           projectContext: {
-            name: project.name,
-            goal: project.goal,
-            memories: buildMemoryContext(memories),
-            files: projectFiles.slice(0, 20).map((file) => ({
-              name: file.name,
-              mimeType: file.mime_type,
-              sizeBytes: file.size_bytes
-            }))
+            projectId: project.id,
+            conversationId
           },
           messages: nextMessages.filter(
             (message) => !message.id.startsWith("project-welcome-")
