@@ -117,8 +117,8 @@ const accountApi = readFileSync(resolve("api/account.js"), "utf8");
 assert(
   accountApi.includes("SUPABASE_SECRET_KEY") &&
     accountApi.includes("deleteUser") &&
-    accountApi.includes('removeOwnedStorageObjects(client, "project-files"') &&
-    accountApi.includes('removeOwnedStorageObjects(client, "artifact-files"'),
+    accountApi.includes('removeOwnedStorageObjects(admin, "project-files"') &&
+    accountApi.includes('removeOwnedStorageObjects(admin, "artifact-files"'),
   "Account deletion must clean private Project and image-artifact Storage before Auth deletion"
 );
 

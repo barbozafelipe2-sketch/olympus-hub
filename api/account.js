@@ -85,8 +85,8 @@ export default async function handler(req, res) {
 
   try {
     const [projectFilesDeleted, artifactFilesDeleted] = await Promise.all([
-      removeOwnedStorageObjects(client, "project-files", user.id),
-      removeOwnedStorageObjects(client, "artifact-files", user.id)
+      removeOwnedStorageObjects(admin, "project-files", user.id),
+      removeOwnedStorageObjects(admin, "artifact-files", user.id)
     ]);
 
     const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
