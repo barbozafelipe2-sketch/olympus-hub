@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0 - Project memory and private files
+
+### Added
+- Approved per-project memory with kinds and priority ranking.
+- Database-enforced memory budget: maximum 40 items and 15,000 characters per scope.
+- Memory deduplication per owner/scope.
+- Private Supabase Storage bucket for Project files.
+- 20 MB per-file limit and allowlisted analysis-friendly MIME types.
+- Project file upload, list, download and delete UI.
+- Project memory and file metadata included in validated AI context.
+- Smoke coverage for memory/file wiring and grounding safeguards.
+
+### Security
+- Project memory and file metadata are owner-scoped with RLS.
+- Storage object paths are bound to authenticated user ID and owned Project ID.
+- Storage bucket is private.
+- File content is never claimed as read when only metadata is available.
+- Storage policies were re-audited after fixing a qualified-column shadowing issue before any file data existed.
+
+### Known gaps
+- Stored file contents are not yet passed into model/tool execution.
+- Artifacts are not generated/persisted yet.
+- Account deletion is not implemented yet.
+- Claude and Google adapters are not enabled yet.
+- Olympus is not yet a real multi-model council.
+- Long project histories still need summarization/compaction.
+
 ## 0.3.0 - Project continuity
 
 ### Added
@@ -15,14 +42,6 @@
 ### Changed
 - Project cards now open the persistent conversation directly.
 - CI now treats `main` as the only active commercial branch.
-
-### Known gaps
-- File selection still does not upload file bytes.
-- Artifacts are not generated/persisted yet.
-- Account deletion is not implemented yet.
-- Claude and Google adapters are not enabled yet.
-- Olympus is not yet a real multi-model council.
-- Long project histories still need summarization/memory compaction.
 
 ## 0.2.0 - Supabase commercial foundation
 
