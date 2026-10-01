@@ -38,6 +38,7 @@ export type ApiChatResponse = {
   provider: string;
   model: string;
   fallbackUsed: boolean;
+  executionId: string | null;
   trace: ApiTraceEntry[];
   orchestration: ApiOrchestration;
 };
