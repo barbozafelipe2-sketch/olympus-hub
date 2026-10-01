@@ -8,9 +8,23 @@ const MessageSchema = z.object({
   content: z.string().min(1).max(30000)
 });
 
+const MemoryContextSchema = z.object({
+  kind: z.string().min(1).max(32),
+  content: z.string().min(1).max(1500),
+  importance: z.number().int().min(1).max(5)
+});
+
+const FileContextSchema = z.object({
+  name: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(200),
+  sizeBytes: z.number().int().min(0).max(20971520)
+});
+
 const ProjectContextSchema = z.object({
   name: z.string().min(1).max(120),
-  goal: z.string().max(5000)
+  goal: z.string().max(5000),
+  memories: z.array(MemoryContextSchema).max(12).optional(),
+  files: z.array(FileContextSchema).max(20).optional()
 });
 
 const BodySchema = z.object({
@@ -137,7 +151,36 @@ export default async function handler(req, res) {
               projectContext.name +
               "\nGoal: " +
               (projectContext.goal || "No explicit goal set.") +
-              "\nKeep the response aligned with this project context unless the user explicitly changes scope."
+              (projectContext.memories?.length
+                ? "\nApproved project memory (higher importance first):\n" +
+                  projectContext.memories
+                    .map(
+                      (memory) =>
+                        "- [" +
+                        memory.kind +
+                        ", importance " +
+                        memory.importance +
+                        "] " +
+                        memory.content
+                    )
+                    .join("\n")
+                : "") +
+              (projectContext.files?.length
+                ? "\nProject files currently stored (metadata only; do not claim file contents were read):\n" +
+                  projectContext.files
+                    .map(
+                      (file) =>
+                        "- " +
+                        file.name +
+                        " (" +
+                        file.mimeType +
+                        ", " +
+                        file.sizeBytes +
+                        " bytes)"
+                    )
+                    .join("\n")
+                : "") +
+              "\nKeep the response aligned with this project context unless the user explicitly changes scope. Never claim to have read a stored file unless file content was actually provided through a capability."
             : ""),
         input: messages.map((message) => ({
           role: message.role,
