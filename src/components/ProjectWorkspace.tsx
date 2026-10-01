@@ -16,6 +16,7 @@ import {
   Trash2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArtifactPreview } from "./ArtifactPreview";
 import { MessageSources } from "./MessageSources";
 import {
   deleteArtifact,
