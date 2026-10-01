@@ -10,17 +10,22 @@ OlyHub is the commercial React product for customer distribution and eventual Ap
 - Supabase Auth
 - Per-user Row Level Security
 - Persistent Projects
+- One durable conversation per Project
+- Persistent Project message history
+- Retry without duplicating saved user messages
 - Responsive Home chat shell
 - Five product modes: Zeus, Olympus, OpenAI, Claude and Google AI
 - File selection UI
 - Artifact rail
 - Server-only AI route protected by a verified Supabase user session
+- Validated Project context sent server-side
 - Zod request validation
 - OpenAI fallback foundation
-- GitHub CI for typecheck and build
+- Locked npm dependencies
+- GitHub CI: `npm ci -> typecheck -> build -> smoke`
 - Database migrations tracked under `supabase/migrations`
 
-The current foundation is intentionally honest about what is not implemented yet: persistent project conversations in the UI, real file transport/storage, artifact generation/persistence, billing, account deletion, real Claude/Google adapters and true Olympus council execution.
+The current foundation is intentionally honest about what is not implemented yet: real file transport/storage, artifact generation/persistence, billing, account deletion, real Claude/Google adapters, long-history compaction and true Olympus council execution.
 
 ## Environment
 
@@ -42,7 +47,7 @@ Never expose a Supabase secret/service-role key or provider API key through a `V
 
 ## Local development
 
-1. Install from the committed lockfile once present:
+1. Install locked dependencies:
    `npm ci`
 2. Copy environment template:
    `cp .env.example .env.local`
@@ -53,8 +58,9 @@ Never expose a Supabase secret/service-role key or provider API key through a `V
 
 - `npm run typecheck`
 - `npm run build`
+- `npm run smoke`
 
-CI runs both checks for commercial branches and pull requests to `main`.
+CI runs on `main` and on pull requests targeting `main`.
 
 ## Architecture
 
@@ -73,8 +79,12 @@ The connected commercial Supabase project has:
 
 All exposed tables have RLS enabled. Policies restrict rows to `auth.uid()` ownership and dependent rows validate their parent project/conversation ownership.
 
+Projects currently use one durable conversation each, enforced by a partial unique index on `conversations.project_id`.
+
 ## Rollback
 
 React foundation merge: `78c42f734f9d0b720c8a75311462ae8ed742796d`.
 
-The Supabase/auth changes are developed on `commercial-supabase-foundation`; rollback code to the React foundation commit if this stage fails validation.
+Supabase/auth foundation merge: `0c9dd6c62b49e923fd6f043ed9ab06fe3b4e214f`.
+
+For later changes, use Git history on `main`; no parallel commercial feature branch is treated as active.
