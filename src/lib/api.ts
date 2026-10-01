@@ -55,7 +55,14 @@ export async function sendChat(
     throw new Error(data?.error || "OlyHub could not complete this request.");
   }
 
-  if (!data?.reply || !data.requestId || !data.provider || !data.model) {
+  if (
+    !data?.reply ||
+    !data.requestId ||
+    !data.provider ||
+    !data.model ||
+    !Array.isArray(data.trace) ||
+    !data.orchestration
+  ) {
     throw new Error("OlyHub received an invalid response from the server.");
   }
 
