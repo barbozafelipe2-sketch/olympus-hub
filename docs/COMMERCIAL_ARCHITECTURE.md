@@ -1,7 +1,8 @@
 # OlyHub Commercial Architecture
 
-Status: Supabase foundation
+Status: Project continuity foundation
 Repository: `barbozafelipe2-sketch/olympus-hub`
+Active code line: `main`
 
 ## Product boundary
 
@@ -10,6 +11,22 @@ This repository is the commercial OlyHub product intended for customer distribut
 It must remain separate from `barbozafelipe2-sketch/zeus-proxy`, which is Felipe's private/personal environment.
 
 Never copy personal data, private prompts, unrestricted admin capabilities, credentials, personal memory, or private execution rules from Zeus Proxy into the commercial product.
+
+## Product thesis
+
+OlyHub does not win by pretending to own a better base model than OpenAI, Anthropic or Google.
+
+It wins by owning continuity:
+- Projects
+- persistent conversations
+- scoped memory
+- files
+- artifacts
+- tasks
+- traces
+- cross-device return state
+
+The provider is infrastructure. OlyHub owns the user's working context.
 
 ## Commercial surfaces
 
@@ -22,17 +39,18 @@ Open-ended conversation. The user can choose:
 - Olympus
 
 ### Projects
-Durable customer workspaces. Projects are now persisted in Supabase and owner-scoped by RLS.
+Durable customer workspaces backed by Supabase.
 
-The backend schema is prepared for:
-- goal
-- conversations
-- messages
-- tasks
-- files (next storage stage)
-- approved memory (next memory stage)
-- artifacts (next artifact stage)
-- execution traces (next orchestration stage)
+Each Project currently has exactly one durable conversation. Opening a Project restores the saved chat and saved mode. User and assistant messages persist in Postgres under owner-scoped RLS.
+
+Provider/model/request metadata is stored with assistant messages for future trace views.
+
+The next workspace layers are:
+- files
+- approved memory
+- artifacts
+- project tasks
+- execution traces
 
 ## Identity and authorization
 
@@ -60,15 +78,28 @@ Private customer profile row keyed to `auth.users.id`.
 Durable customer workspaces.
 
 ### conversations
-Chats may belong to a project or the user's global space.
+One durable conversation per Project today. The database enforces uniqueness for non-null `project_id`.
 
 ### messages
-Conversation messages with metadata reserved for future provider/execution references.
+Persistent conversation messages. Assistant rows can store request/provider/model/fallback metadata.
 
 ### project_tasks
 Project-scoped work items.
 
 All five tables have RLS enabled.
+
+## Project chat lifecycle
+
+1. User opens a Project.
+2. OlyHub loads or creates the Project conversation.
+3. Saved messages and saved mode are restored.
+4. The Project name and goal are passed to the server as validated context.
+5. The user message is persisted before provider execution.
+6. The provider response is persisted with run metadata.
+7. Project/conversation activity timestamps are refreshed.
+8. If provider execution fails, retry reuses the saved message rather than duplicating it.
+
+This gives OlyHub a durable return point instead of a disposable chat session.
 
 ## Mode contract
 
@@ -101,6 +132,7 @@ The current API does not claim real council execution yet. Until adapters/orches
 - Supabase secret/service-role keys are never used in the browser.
 - `/api/chat` requires a verified Supabase bearer token.
 - Client payloads are validated server-side with Zod.
+- Project context is separately schema-validated.
 - Client-controlled system prompts are not accepted.
 - Errors returned to clients are normalized.
 - Destructive or externally consequential actions will use PREPARE -> SHOW USER -> APPROVE -> EXECUTE -> VERIFY.
@@ -118,7 +150,7 @@ The current API does not claim real council execution yet. Until adapters/orches
 
 ## Apple App Store path
 
-The React web foundation should be stable before native packaging is added. The expected packaging path is a native wrapper such as Capacitor, with bundle identity, Sign in with Apple requirements when applicable, privacy disclosures, purchase/subscription rules, push notification entitlements and App Store review assets handled as a dedicated release phase.
+The React product must be stable before native packaging is added. The expected path is a native wrapper such as Capacitor, with bundle identity, Sign in with Apple requirements when applicable, privacy disclosures, purchase/subscription rules, push notification entitlements and App Store review assets handled as a dedicated release phase.
 
 Do not treat a responsive web build alone as App Store-ready.
 
@@ -127,16 +159,17 @@ Do not treat a responsive web build alone as App Store-ready.
 - Authentication ✅
 - Per-user/project RLS ✅
 - Persistent Projects ✅
-- Persistent project conversations
+- Persistent Project conversations ✅
+- Locked dependency install + executable smoke ✅
 - Account deletion
 - Real file upload and secure object storage
 - Artifact persistence/versioning
 - Memory policy and provenance
+- Long-history compaction/summarization
 - Provider adapter registry and health/fallback rules
 - Zeus and Olympus orchestration implemented and traceable
 - Server-side quotas/rate limits
 - Usage/cost ledger
 - Privacy policy and terms
 - Observability and provider failure traces
-- Production CI with committed lockfile
 - End-to-end tests for chat, upload, projects and account isolation
