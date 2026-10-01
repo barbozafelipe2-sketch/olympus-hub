@@ -47,6 +47,50 @@ export type Database = {
         }
         Relationships: []
       }
+      artifact_files: {
+        Row: {
+          artifact_id: string
+          bucket_id: string
+          created_at: string
+          id: string
+          mime_type: string
+          owner_id: string
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Insert: {
+          artifact_id: string
+          bucket_id?: string
+          created_at?: string
+          id?: string
+          mime_type: string
+          owner_id: string
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Update: {
+          artifact_id?: string
+          bucket_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string
+          owner_id?: string
+          size_bytes?: number
+          storage_path?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifact_files_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "artifacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       artifact_versions: {
         Row: {
           artifact_id: string
