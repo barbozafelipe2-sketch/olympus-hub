@@ -42,6 +42,7 @@ type RunMeta = {
   model: string;
   fallbackUsed: boolean;
   requestId: string;
+  executionId: string | null;
   calls: number;
   multiProvider: boolean;
   degraded: boolean;
@@ -314,6 +315,7 @@ export function ProjectWorkspace({
         content: result.reply,
         metadata: {
           request_id: result.requestId,
+          execution_id: result.executionId,
           provider: result.provider,
           model: result.model,
           fallback_used: result.fallbackUsed,
@@ -328,6 +330,7 @@ export function ProjectWorkspace({
         model: result.model,
         fallbackUsed: result.fallbackUsed,
         requestId: result.requestId,
+        executionId: result.executionId,
         calls: result.orchestration.calls,
         multiProvider: result.orchestration.multiProvider,
         degraded: result.orchestration.degraded,
@@ -674,6 +677,7 @@ export function ProjectWorkspace({
                 <div><dt>Multi-provider</dt><dd>{runMeta.multiProvider ? "Yes" : "No"}</dd></div>
                 <div><dt>Fallback</dt><dd>{runMeta.fallbackUsed ? "Used" : "No"}</dd></div>
                 <div><dt>Degraded</dt><dd>{runMeta.degraded ? "Yes" : "No"}</dd></div>
+                <div><dt>Execution</dt><dd>{runMeta.executionId ? runMeta.executionId.slice(0, 8) : "Not stored"}</dd></div>
                 <div><dt>Request</dt><dd>{runMeta.requestId.slice(0, 8)}</dd></div>
               </dl>
             ) : (
