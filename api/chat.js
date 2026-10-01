@@ -3,7 +3,8 @@ import { z } from "zod";
 import { executeMode } from "./lib/orchestrator.js";
 import {
   persistRequestedArtifact,
-  readRequestedProjectFiles
+  readRequestedProjectFiles,
+  runWebSearchCapability
 } from "./lib/capabilities.js";
 
 const ModeSchema = z.enum(["zeus", "olympus", "openai", "claude", "google"]);
@@ -386,6 +387,32 @@ function remaining(limit, used) {
   return limit == null ? null : Math.max(0, limit - used);
 }
 
+
+function combineUsage(baseUsage, capabilityTraces) {
+  const total = {
+    inputTokens: numeric(baseUsage?.inputTokens),
+    outputTokens: numeric(baseUsage?.outputTokens),
+    cachedInputTokens: numeric(baseUsage?.cachedInputTokens),
+    cacheWriteTokens: numeric(baseUsage?.cacheWriteTokens),
+    reasoningTokens: numeric(baseUsage?.reasoningTokens),
+    toolTokens: numeric(baseUsage?.toolTokens),
+    totalTokens: numeric(baseUsage?.totalTokens)
+  };
+
+  for (const capability of capabilityTraces) {
+    if (!capability?.usage) continue;
+    total.inputTokens += numeric(capability.usage.inputTokens);
+    total.outputTokens += numeric(capability.usage.outputTokens);
+    total.cachedInputTokens += numeric(capability.usage.cachedInputTokens);
+    total.cacheWriteTokens += numeric(capability.usage.cacheWriteTokens);
+    total.reasoningTokens += numeric(capability.usage.reasoningTokens);
+    total.toolTokens += numeric(capability.usage.toolTokens);
+    total.totalTokens += numeric(capability.usage.totalTokens);
+  }
+
+  return total;
+}
+
 async function getQuotaStatus(client, userId) {
   const [limitResult, summaryResult] = await Promise.all([
     client
@@ -471,11 +498,23 @@ async function recordUsageEvents(client, {
   executionId,
   ownerId,
   projectId,
-  trace
+  trace,
+  capabilities
 }) {
-  if (!executionId || !Array.isArray(trace) || trace.length === 0) return false;
+  if (!executionId) return false;
 
-  const rows = trace.map((entry) => {
+  const modelEntries = Array.isArray(trace) ? trace : [];
+  const capabilityEntries = (Array.isArray(capabilities) ? capabilities : [])
+    .filter((entry) => entry?.usage && entry?.requestId)
+    .map((entry) => ({
+      ...entry,
+      role: "capability:" + (entry.name || "unknown")
+    }));
+  const entries = [...modelEntries, ...capabilityEntries];
+
+  if (entries.length === 0) return false;
+
+  const rows = entries.map((entry) => {
     const usage = entry.usage || {};
     return {
       owner_id: ownerId,
@@ -626,20 +665,27 @@ export default async function handler(req, res) {
       : messages.slice(-40);
 
   const startedAt = Date.now();
-  const fileCapability = canonicalContext
-    ? await readRequestedProjectFiles({
-        client: auth.client,
-        files: canonicalContext.files,
-        messages: effectiveMessages
-      })
-    : { context: "", traces: [] };
+  const [fileCapability, webCapability] = await Promise.all([
+    canonicalContext
+      ? readRequestedProjectFiles({
+          client: auth.client,
+          files: canonicalContext.files,
+          messages: effectiveMessages
+        })
+      : Promise.resolve({ context: "", traces: [] }),
+    runWebSearchCapability({
+      messages: effectiveMessages
+    })
+  ]);
 
   try {
     const result = await executeMode({
       mode,
       messages: effectiveMessages,
       systemContext:
-        buildProjectSystemContext(canonicalContext) + fileCapability.context
+        buildProjectSystemContext(canonicalContext) +
+        fileCapability.context +
+        webCapability.context
     });
 
     const artifactCapability = await persistRequestedArtifact({
@@ -651,6 +697,7 @@ export default async function handler(req, res) {
 
     const capabilities = [
       ...fileCapability.traces,
+      ...webCapability.traces,
       ...artifactCapability.traces
     ];
     const capabilityDegraded = capabilities.some(
@@ -681,19 +728,23 @@ export default async function handler(req, res) {
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
 
+    const usage = combineUsage(result.usage, capabilities);
     const usageRecorded = await recordUsageEvents(auth.client, {
       executionId,
       ownerId: auth.user.id,
       projectId: canonicalContext?.project.id ?? null,
-      trace: result.trace
+      trace: result.trace,
+      capabilities
     });
 
     return res.status(200).json({
       ...result,
+      usage,
       orchestration,
       executionId,
       artifact: artifactCapability.artifact,
       capabilities,
+      sources: webCapability.sources,
       quota,
       usageRecorded
     });
@@ -727,7 +778,10 @@ export default async function handler(req, res) {
             status: error?.status || null
           }
         ],
-        capabilities: fileCapability.traces
+        capabilities: [
+          ...fileCapability.traces,
+          ...webCapability.traces
+        ]
       },
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
