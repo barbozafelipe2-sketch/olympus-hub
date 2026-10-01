@@ -1,9 +1,9 @@
-const CACHE = "olyhub-shell-v1";
+const CACHE = "olyhub-shell-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
-      cache.addAll(["/", "/manifest.webmanifest", "/icons/olyhub.svg"])
+      cache.addAll(["/", "/manifest.webmanifest", "/icons/olyhub.svg", "/icons/olyhub-180.png", "/icons/olyhub-192.png", "/icons/olyhub-512.png"])
     )
   );
   self.skipWaiting();

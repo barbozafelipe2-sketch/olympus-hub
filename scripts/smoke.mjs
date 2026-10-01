@@ -37,6 +37,9 @@ for (const path of [
   "api/account.js",
   "public/manifest.webmanifest",
   "public/icons/olyhub.svg",
+  "public/icons/olyhub-180.png",
+  "public/icons/olyhub-192.png",
+  "public/icons/olyhub-512.png",
   "public/sw.js",
   "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
   "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql",
@@ -135,9 +138,34 @@ assert(
   mainSource.includes('serviceWorker.register("/sw.js")') &&
     manifest.display === "standalone" &&
     Array.isArray(manifest.icons) &&
-    manifest.icons.length > 0,
-  "PWA install foundation is incomplete"
+    manifest.icons.some((icon) => icon.sizes === "192x192" && icon.type === "image/png") &&
+    manifest.icons.some((icon) => icon.sizes === "512x512" && icon.type === "image/png"),
+  "PWA install foundation must include standard PNG icon sizes"
 );
+
+const appHtml = readFileSync(resolve("index.html"), "utf8");
+assert(
+  appHtml.includes('rel="apple-touch-icon"') &&
+    serviceWorker.includes("olyhub-180.png") &&
+    serviceWorker.includes("olyhub-192.png") &&
+    serviceWorker.includes("olyhub-512.png"),
+  "PWA must advertise and precache Apple/web home-screen icons"
+);
+
+for (const [filename, size] of [
+  ["olyhub-180.png", 180],
+  ["olyhub-192.png", 192],
+  ["olyhub-512.png", 512]
+]) {
+  const png = readFileSync(resolve("public/icons/" + filename));
+  assert(
+    png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
+      png.readUInt32BE(16) === size &&
+      png.readUInt32BE(20) === size &&
+      existsSync(resolve("dist/icons/" + filename)),
+    filename + " must be a valid square PNG copied into the production build"
+  );
+}
 
 assert(
   serviceWorker.includes('url.pathname.startsWith("/api/")') &&

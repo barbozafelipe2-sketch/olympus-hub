@@ -13,6 +13,7 @@ This file is a release checklist, not a claim that the current web build is an i
 - OlyHub has an explicit privacy/authorization boundary for Project data.
 - Usage and execution state are traceable.
 - PWA shell does not cache authenticated API responses.
+- PWA includes 180px Apple touch icon and 192/512px PNG web install icons; these do not replace the native App Store icon asset catalog.
 - Email/password is currently OlyHub's own account system; there is no third-party/social login in the commercial UI today.
 
 ## Required before App Store submission
