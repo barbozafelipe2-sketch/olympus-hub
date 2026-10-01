@@ -136,11 +136,11 @@ function artifactKind(text) {
   return "document";
 }
 
-function artifactTitle(text, projectName, kind) {
+function artifactTitle(text, scopeName, kind) {
   const compact = text.replace(/\s+/g, " ").trim();
   const clipped = compact.length > 90 ? compact.slice(0, 87) + "..." : compact;
   if (clipped.length >= 8) return clipped;
-  return projectName + " — " + kind;
+  return scopeName + " — " + kind;
 }
 
 async function createArtifact({
@@ -150,10 +150,12 @@ async function createArtifact({
   result
 }) {
   const kind = artifactKind(userText);
-  const title = artifactTitle(userText, context.project.name, kind);
+  const scopeName =
+    context.project?.name || context.conversation?.title || "OlyHub chat";
+  const title = artifactTitle(userText, scopeName, kind);
 
   const { data, error } = await client.rpc("create_artifact_with_version", {
-    p_project_id: context.project.id,
+    p_project_id: context.project?.id ?? null,
     p_conversation_id: context.conversation.id,
     p_title: title,
     p_kind: kind,
@@ -183,11 +185,19 @@ async function reviseLatestArtifact({
   context,
   result
 }) {
-  const { data: artifact, error: artifactError } = await client
+  let query = client
     .from("artifacts")
     .select("id, title, kind, mime_type, current_version")
-    .eq("project_id", context.project.id)
-    .eq("status", "active")
+    .eq("conversation_id", context.conversation.id)
+    .eq("status", "active");
+
+  if (context.project?.id) {
+    query = query.eq("project_id", context.project.id);
+  } else {
+    query = query.is("project_id", null);
+  }
+
+  const { data: artifact, error: artifactError } = await query
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
