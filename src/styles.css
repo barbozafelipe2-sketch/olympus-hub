@@ -1235,3 +1235,136 @@ select:focus-visible {
     border-radius: 20px;
   }
 }
+
+
+/* Durable project conversation */
+
+.project-workspace {
+  min-height: 0;
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.project-workspace-header {
+  min-height: 82px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(18px, env(safe-area-inset-right))
+    12px
+    max(18px, env(safe-area-inset-left));
+  background: rgba(7, 8, 11, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.project-workspace-title {
+  min-width: 0;
+}
+
+.project-workspace-title h1 {
+  margin: 3px 0 0;
+  font-size: 17px;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-workspace-title p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-workspace-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 286px;
+}
+
+.project-context-copy {
+  margin-top: 12px;
+}
+
+.project-context-copy span {
+  color: var(--muted-2);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.project-context-copy p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.retry-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.retry-banner button {
+  border: 1px solid rgba(255, 124, 133, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffd2d5;
+  border-radius: 9px;
+  min-height: 32px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.project-card-clickable {
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.project-card-clickable:hover,
+.project-card-clickable:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(240, 201, 106, 0.2);
+  background: #111319;
+  outline: none;
+}
+
+@media (max-width: 1050px) {
+  .project-workspace-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .project-workspace-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .project-workspace-header .mode-select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .retry-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
