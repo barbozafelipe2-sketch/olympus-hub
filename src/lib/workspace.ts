@@ -85,10 +85,13 @@ export async function loadMessages(conversationId: string) {
     .from("messages")
     .select("*")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
+    // Fetch the latest window, then return it in display order. Ordering
+    // ascending before applying the limit silently hid newer turns once a
+    // conversation grew beyond 200 messages.
+    .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
-  return (data ?? []) as Message[];
+  return (data ?? []).reverse() as Message[];
 }
 
 export async function addMessage(input: {
