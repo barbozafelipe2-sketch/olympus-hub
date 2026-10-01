@@ -22,4 +22,31 @@ assert(
   "Supabase dependency is not locked to the expected version"
 );
 
+for (const path of [
+  "src/lib/memory.ts",
+  "src/lib/projectFiles.ts",
+  "src/components/ProjectWorkspace.tsx",
+  "supabase/migrations/20261001151323_project_memory_and_private_files.sql",
+  "supabase/migrations/20261001151359_fix_project_file_storage_policies.sql"
+]) {
+  assert(existsSync(resolve(path)), path + " is missing");
+}
+
+const projectWorkspace = readFileSync(
+  resolve("src/components/ProjectWorkspace.tsx"),
+  "utf8"
+);
+assert(
+  projectWorkspace.includes("buildMemoryContext") &&
+    projectWorkspace.includes("uploadProjectFiles"),
+  "Project workspace is not wired to memory/files"
+);
+
+const chatApi = readFileSync(resolve("api/chat.js"), "utf8");
+assert(
+  chatApi.includes("Approved project memory") &&
+    chatApi.includes("metadata only; do not claim file contents were read"),
+  "Chat API is missing memory/file grounding safeguards"
+);
+
 console.log("OlyHub smoke: PASS");
