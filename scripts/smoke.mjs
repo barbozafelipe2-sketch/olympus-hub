@@ -146,7 +146,8 @@ assert(
 
 assert(
   projectWorkspace.includes(".slice(-24)") &&
-    appSource.includes("nextMessages.slice(-40)"),
+    appSource.includes(".slice(-40)") &&
+    appSource.includes("conversationId: conversation.id"),
   "Client history windows are not bounded"
 );
 
