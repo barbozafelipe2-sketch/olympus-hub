@@ -43,6 +43,10 @@ type RunMeta = {
   model: string;
   fallbackUsed: boolean;
   requestId: string;
+  calls: number;
+  multiProvider: boolean;
+  degraded: boolean;
+  route: string;
 } | null;
 
 type Props = {
@@ -319,7 +323,9 @@ export function ProjectWorkspace({
           request_id: result.requestId,
           provider: result.provider,
           model: result.model,
-          fallback_used: result.fallbackUsed
+          fallback_used: result.fallbackUsed,
+          orchestration: result.orchestration,
+          trace: result.trace
         }
       });
 
@@ -328,7 +334,11 @@ export function ProjectWorkspace({
         provider: result.provider,
         model: result.model,
         fallbackUsed: result.fallbackUsed,
-        requestId: result.requestId
+        requestId: result.requestId,
+        calls: result.orchestration.calls,
+        multiProvider: result.orchestration.multiProvider,
+        degraded: result.orchestration.degraded,
+        route: [...new Set(result.trace.map((entry) => entry.provider))].join(" → ")
       });
 
       const touchedAt = new Date().toISOString();
@@ -666,7 +676,11 @@ export function ProjectWorkspace({
               <dl className="run-grid">
                 <div><dt>Provider</dt><dd>{runMeta.provider}</dd></div>
                 <div><dt>Model</dt><dd>{runMeta.model}</dd></div>
+                <div><dt>Calls</dt><dd>{runMeta.calls}</dd></div>
+                <div><dt>Route</dt><dd title={runMeta.route}>{runMeta.route || runMeta.provider}</dd></div>
+                <div><dt>Multi-provider</dt><dd>{runMeta.multiProvider ? "Yes" : "No"}</dd></div>
                 <div><dt>Fallback</dt><dd>{runMeta.fallbackUsed ? "Used" : "No"}</dd></div>
+                <div><dt>Degraded</dt><dd>{runMeta.degraded ? "Yes" : "No"}</dd></div>
                 <div><dt>Request</dt><dd>{runMeta.requestId.slice(0, 8)}</dd></div>
               </dl>
             ) : (
