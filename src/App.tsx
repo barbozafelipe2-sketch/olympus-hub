@@ -40,6 +40,7 @@ type RunMeta = {
   model: string;
   fallbackUsed: boolean;
   requestId: string;
+  executionId: string | null;
   calls: number;
   multiProvider: boolean;
   degraded: boolean;
@@ -221,6 +222,7 @@ export default function App() {
         model: result.model,
         fallbackUsed: result.fallbackUsed,
         requestId: result.requestId,
+        executionId: result.executionId,
         calls: result.orchestration.calls,
         multiProvider: result.orchestration.multiProvider,
         degraded: result.orchestration.degraded,
@@ -586,6 +588,10 @@ export default function App() {
                     <div>
                       <dt>Degraded</dt>
                       <dd>{runMeta.degraded ? "Yes" : "No"}</dd>
+                    </div>
+                    <div>
+                      <dt>Execution</dt>
+                      <dd>{runMeta.executionId ? runMeta.executionId.slice(0, 8) : "Not stored"}</dd>
                     </div>
                     <div>
                       <dt>Request</dt>
