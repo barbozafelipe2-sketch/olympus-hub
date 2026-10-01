@@ -28,6 +28,7 @@ for (const path of [
   "src/lib/artifacts.ts",
   "src/lib/account.ts",
   "src/lib/settings.ts",
+  "src/lib/tasks.ts",
   "src/components/ProjectWorkspace.tsx",
   "src/components/SettingsView.tsx",
   "src/components/Onboarding.tsx",
@@ -56,6 +57,8 @@ const projectWorkspace = readFileSync(
 );
 assert(
   projectWorkspace.includes("addProjectMemory") &&
+    projectWorkspace.includes("listProjectTasks") &&
+    projectWorkspace.includes("setProjectTaskStatus") &&
     projectWorkspace.includes("uploadProjectFiles") &&
     projectWorkspace.includes("listProjectArtifacts") &&
     projectWorkspace.includes("projectId: project.id") &&
@@ -156,6 +159,13 @@ assert(
   healthApi.includes('liveProviderHealth: "not_probed"') &&
     healthApi.includes("deploymentStatus"),
   "Health endpoint must distinguish configuration from live provider health"
+);
+
+
+assert(
+  chatApi.includes('from("project_tasks")') &&
+    chatApi.includes("Project tasks (current durable work state)"),
+  "Project tasks are not grounded in server-side AI context"
 );
 
 console.log("OlyHub smoke: PASS");
