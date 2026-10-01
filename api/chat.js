@@ -9,23 +9,9 @@ const MessageSchema = z.object({
   content: z.string().min(1).max(30000)
 });
 
-const MemoryContextSchema = z.object({
-  kind: z.string().min(1).max(32),
-  content: z.string().min(1).max(1500),
-  importance: z.number().int().min(1).max(5)
-});
-
-const FileContextSchema = z.object({
-  name: z.string().min(1).max(255),
-  mimeType: z.string().min(1).max(200),
-  sizeBytes: z.number().int().min(0).max(20971520)
-});
-
 const ProjectContextSchema = z.object({
-  name: z.string().min(1).max(120),
-  goal: z.string().max(5000),
-  memories: z.array(MemoryContextSchema).max(12).optional(),
-  files: z.array(FileContextSchema).max(20).optional()
+  projectId: z.string().uuid(),
+  conversationId: z.string().uuid()
 });
 
 const BodySchema = z.object({
@@ -41,36 +27,104 @@ function bearerToken(req) {
   return match?.[1]?.trim() || null;
 }
 
-async function authenticate(req) {
-  const token = bearerToken(req);
+function makeUserClient(token) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
   if (!token || !supabaseUrl || !publishableKey) return null;
 
-  const authClient = createClient(supabaseUrl, publishableKey, {
+  return createClient(supabaseUrl, publishableKey, {
+    global: {
+      headers: {
+        Authorization: "Bearer " + token
+      }
+    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false
     }
   });
+}
+
+async function authenticate(req) {
+  const token = bearerToken(req);
+  const client = makeUserClient(token);
+  if (!token || !client) return null;
 
   const {
     data: { user },
     error
-  } = await authClient.auth.getUser(token);
+  } = await client.auth.getUser(token);
 
   if (error || !user) return null;
-  return user;
+  return { user, client };
 }
 
-function buildProjectSystemContext(projectContext) {
-  if (!projectContext) return "";
+async function loadCanonicalProjectContext(client, identifiers) {
+  if (!identifiers) return null;
 
-  const memoryBlock = projectContext.memories?.length
+  const { data: project, error: projectError } = await client
+    .from("projects")
+    .select("id, name, goal")
+    .eq("id", identifiers.projectId)
+    .single();
+
+  if (projectError || !project) {
+    throw Object.assign(new Error("Project context is not available."), {
+      code: "PROJECT_CONTEXT_DENIED"
+    });
+  }
+
+  const { data: conversation, error: conversationError } = await client
+    .from("conversations")
+    .select("id, project_id")
+    .eq("id", identifiers.conversationId)
+    .single();
+
+  if (
+    conversationError ||
+    !conversation ||
+    conversation.project_id !== project.id
+  ) {
+    throw Object.assign(new Error("Project conversation is not available."), {
+      code: "PROJECT_CONTEXT_DENIED"
+    });
+  }
+
+  const [memoryResult, fileResult] = await Promise.all([
+    client
+      .from("project_memories")
+      .select("kind, content, importance")
+      .eq("project_id", project.id)
+      .order("importance", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(12),
+    client
+      .from("project_files")
+      .select("name, mime_type, size_bytes")
+      .eq("project_id", project.id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+  ]);
+
+  if (memoryResult.error) throw memoryResult.error;
+  if (fileResult.error) throw fileResult.error;
+
+  return {
+    project,
+    conversation,
+    memories: memoryResult.data ?? [],
+    files: fileResult.data ?? []
+  };
+}
+
+function buildProjectSystemContext(context) {
+  if (!context) return "";
+
+  const memoryBlock = context.memories.length
     ? "\nApproved project memory (higher importance first):\n" +
-      projectContext.memories
+      context.memories
         .map(
           (memory) =>
             "- [" +
@@ -83,17 +137,17 @@ function buildProjectSystemContext(projectContext) {
         .join("\n")
     : "";
 
-  const filesBlock = projectContext.files?.length
+  const filesBlock = context.files.length
     ? "\nProject files currently stored (metadata only):\n" +
-      projectContext.files
+      context.files
         .map(
           (file) =>
             "- " +
             file.name +
             " (" +
-            file.mimeType +
+            file.mime_type +
             ", " +
-            file.sizeBytes +
+            file.size_bytes +
             " bytes)"
         )
         .join("\n")
@@ -101,9 +155,9 @@ function buildProjectSystemContext(projectContext) {
 
   return (
     "\n\nActive OlyHub project context:\nProject: " +
-    projectContext.name +
+    context.project.name +
     "\nGoal: " +
-    (projectContext.goal || "No explicit goal set.") +
+    (context.project.goal || "No explicit goal set.") +
     memoryBlock +
     filesBlock +
     "\nKeep the answer aligned with this project unless the user explicitly changes scope." +
@@ -112,14 +166,31 @@ function buildProjectSystemContext(projectContext) {
   );
 }
 
+async function recordExecution(client, input) {
+  const { data, error } = await client
+    .from("executions")
+    .insert(input)
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("OlyHub execution trace persistence failure", {
+      code: error.code
+    });
+    return null;
+  }
+
+  return data?.id ?? null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const user = await authenticate(req);
-  if (!user) {
+  const auth = await authenticate(req);
+  if (!auth) {
     return res.status(401).json({ error: "Authentication required." });
   }
 
@@ -136,27 +207,98 @@ export default async function handler(req, res) {
 
   const { mode, messages, projectContext } = parsed.data;
 
+  let canonicalContext = null;
+  try {
+    canonicalContext = await loadCanonicalProjectContext(
+      auth.client,
+      projectContext
+    );
+  } catch (error) {
+    const denied =
+      error instanceof Error && error.code === "PROJECT_CONTEXT_DENIED";
+
+    console.error("OlyHub project context failure", {
+      userId: auth.user.id,
+      denied,
+      code: error?.code
+    });
+
+    return res.status(denied ? 403 : 500).json({
+      error: denied
+        ? "Project context is unavailable for this account."
+        : "OlyHub could not load project context."
+    });
+  }
+
+  const startedAt = Date.now();
+
   try {
     const result = await executeMode({
       mode,
       messages,
-      systemContext: buildProjectSystemContext(projectContext)
+      systemContext: buildProjectSystemContext(canonicalContext)
     });
 
-    return res.status(200).json(result);
+    const executionId = await recordExecution(auth.client, {
+      owner_id: auth.user.id,
+      project_id: canonicalContext?.project.id ?? null,
+      conversation_id: canonicalContext?.conversation.id ?? null,
+      mode,
+      status: result.orchestration.degraded ? "degraded" : "completed",
+      provider: result.provider,
+      model: result.model,
+      request_id: result.requestId,
+      fallback_used: result.fallbackUsed,
+      call_count: result.orchestration.calls,
+      multi_provider: result.orchestration.multiProvider,
+      degraded: result.orchestration.degraded,
+      trace: result.trace,
+      latency_ms: Math.min(300000, Date.now() - startedAt)
+    });
+
+    return res.status(200).json({
+      ...result,
+      executionId
+    });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
     const unavailable =
       error instanceof Error &&
       (error.unavailable === true || /unavailable/i.test(error.message));
 
+    const requestId = error?.requestId || crypto.randomUUID();
+
+    await recordExecution(auth.client, {
+      owner_id: auth.user.id,
+      project_id: canonicalContext?.project.id ?? null,
+      conversation_id: canonicalContext?.conversation.id ?? null,
+      mode,
+      status: "failed",
+      provider: error?.provider || "unknown",
+      model: "unknown",
+      request_id: requestId,
+      fallback_used: false,
+      call_count: 1,
+      multi_provider: false,
+      degraded: true,
+      trace: [
+        {
+          role: "failed-route",
+          providerId: error?.provider || "unknown",
+          requestId,
+          status: error?.status || null
+        }
+      ],
+      latency_ms: Math.min(300000, Date.now() - startedAt)
+    });
+
     console.error("OlyHub orchestration failure", {
-      userId: user.id,
+      userId: auth.user.id,
       mode,
       kind: timedOut ? "timeout" : unavailable ? "unavailable" : "provider_failure",
       provider: error?.provider,
       status: error?.status,
-      requestId: error?.requestId
+      requestId
     });
 
     return res.status(timedOut ? 504 : unavailable ? 503 : 502).json({
@@ -165,7 +307,7 @@ export default async function handler(req, res) {
         : unavailable
           ? "No configured AI route is currently available."
           : "OlyHub could not complete the AI route.",
-      requestId: error?.requestId
+      requestId
     });
   }
 }
