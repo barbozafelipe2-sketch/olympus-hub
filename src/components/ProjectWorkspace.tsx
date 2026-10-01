@@ -1,10 +1,14 @@
 import {
   ArrowLeft,
   Brain,
+  CheckCircle2,
+  Circle,
+  Clock3,
   Download,
   FileText,
   FolderKanban,
   Paperclip,
+  Plus,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -41,6 +45,14 @@ import {
 } from "../lib/projectFiles";
 import { sendChat } from "../lib/api";
 import type { ProjectRow } from "../lib/projects";
+import {
+  createProjectTask,
+  deleteProjectTask,
+  listProjectTasks,
+  setProjectTaskStatus,
+  type ProjectTaskRow,
+  type ProjectTaskStatus
+} from "../lib/tasks";
 import { MODES, type ChatMessage, type ModeId } from "../types";
 
 type RunMeta = {
@@ -100,6 +112,35 @@ function sortMemories(rows: MemoryRow[]) {
   });
 }
 
+
+const TASK_STATUS_ORDER: Record<ProjectTaskStatus, number> = {
+  in_progress: 0,
+  todo: 1,
+  done: 2
+};
+
+function sortTasks(rows: ProjectTaskRow[]) {
+  return [...rows].sort((a, b) => {
+    const aStatus = TASK_STATUS_ORDER[a.status as ProjectTaskStatus] ?? 9;
+    const bStatus = TASK_STATUS_ORDER[b.status as ProjectTaskStatus] ?? 9;
+    if (aStatus !== bStatus) return aStatus - bStatus;
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
+
+function nextTaskStatus(status: string): ProjectTaskStatus {
+  if (status === "todo") return "in_progress";
+  if (status === "in_progress") return "done";
+  return "todo";
+}
+
+function TaskStatusIcon({ status }: { status: string }) {
+  if (status === "done") return <CheckCircle2 size={14} />;
+  if (status === "in_progress") return <Clock3 size={14} />;
+  return <Circle size={14} />;
+}
+
 export function ProjectWorkspace({
   project,
   ownerId,
@@ -112,12 +153,15 @@ export function ProjectWorkspace({
   const [memories, setMemories] = useState<MemoryRow[]>([]);
   const [projectFiles, setProjectFiles] = useState<ProjectFileRow[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactRow[]>([]);
+  const [tasks, setTasks] = useState<ProjectTaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [memoryDraft, setMemoryDraft] = useState("");
   const [memoryKind, setMemoryKind] = useState<MemoryKind>("fact");
   const [memoryImportance, setMemoryImportance] = useState(3);
   const [memoryBusy, setMemoryBusy] = useState(false);
+  const [taskDraft, setTaskDraft] = useState("");
+  const [taskBusy, setTaskBusy] = useState(false);
   const [filesBusy, setFilesBusy] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [retryAvailable, setRetryAvailable] = useState(false);
@@ -139,6 +183,7 @@ export function ProjectWorkspace({
     setMemories([]);
     setProjectFiles([]);
     setArtifacts([]);
+    setTasks([]);
 
     void Promise.all([
       getOrCreateProjectConversation({
@@ -149,9 +194,16 @@ export function ProjectWorkspace({
       }),
       listProjectMemories(project.id),
       listProjectFiles(project.id),
-      listProjectArtifacts(project.id)
+      listProjectArtifacts(project.id),
+      listProjectTasks(project.id)
     ])
-      .then(async ([conversation, savedMemories, savedFiles, savedArtifacts]) => {
+      .then(async ([
+        conversation,
+        savedMemories,
+        savedFiles,
+        savedArtifacts,
+        savedTasks
+      ]) => {
         const savedMessages = await loadConversationMessages(conversation.id);
         if (!active) return;
 
@@ -163,6 +215,7 @@ export function ProjectWorkspace({
         setMemories(sortMemories(savedMemories));
         setProjectFiles(savedFiles);
         setArtifacts(savedArtifacts);
+        setTasks(sortTasks(savedTasks));
       })
       .catch((caught) => {
         if (!active) return;
@@ -256,6 +309,79 @@ export function ProjectWorkspace({
       );
     } finally {
       setMemoryBusy(false);
+    }
+  }
+
+  async function saveTask() {
+    const title = taskDraft.trim();
+    if (!title || taskBusy) return;
+
+    setTaskBusy(true);
+    setError(null);
+
+    try {
+      const task = await createProjectTask({
+        ownerId,
+        projectId: project.id,
+        title
+      });
+
+      setTasks((current) => sortTasks([...current, task]));
+      setTaskDraft("");
+
+      const touchedAt = new Date().toISOString();
+      if (conversationId) {
+        await touchConversationAndProject({
+          conversationId,
+          projectId: project.id
+        }).catch(() => undefined);
+      }
+      onProjectTouched(project.id, touchedAt);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to create task."
+      );
+    } finally {
+      setTaskBusy(false);
+    }
+  }
+
+  async function advanceTask(task: ProjectTaskRow) {
+    if (taskBusy) return;
+    setTaskBusy(true);
+    setError(null);
+
+    try {
+      const updated = await setProjectTaskStatus(
+        task.id,
+        nextTaskStatus(task.status)
+      );
+      setTasks((current) =>
+        sortTasks(current.map((item) => (item.id === task.id ? updated : item)))
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to update task."
+      );
+    } finally {
+      setTaskBusy(false);
+    }
+  }
+
+  async function removeTask(taskId: string) {
+    if (taskBusy) return;
+    setTaskBusy(true);
+    setError(null);
+
+    try {
+      await deleteProjectTask(taskId);
+      setTasks((current) => current.filter((item) => item.id !== taskId));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to delete task."
+      );
+    } finally {
+      setTaskBusy(false);
     }
   }
 
@@ -585,6 +711,85 @@ export function ProjectWorkspace({
             <div className="project-context-copy">
               <span>Goal</span>
               <p>{project.goal || "No goal defined yet."}</p>
+            </div>
+          </section>
+
+          <section className="rail-card">
+            <div className="rail-heading rail-heading-split">
+              <span>
+                <CheckCircle2 size={17} />
+                <strong>Tasks</strong>
+              </span>
+              <small>
+                {tasks.filter((task) => task.status === "done").length}/{tasks.length}
+              </small>
+            </div>
+
+            <div className="task-compose">
+              <input
+                maxLength={240}
+                value={taskDraft}
+                onChange={(event) => setTaskDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveTask();
+                  }
+                }}
+                placeholder="Next action..."
+              />
+              <button
+                className="rail-action task-add"
+                disabled={!taskDraft.trim() || taskBusy}
+                onClick={() => void saveTask()}
+                aria-label="Add project task"
+              >
+                <Plus size={14} />
+                Add
+              </button>
+            </div>
+
+            <div className="rail-list task-list">
+              {tasks.length === 0 ? (
+                <div className="empty-rail">
+                  Add the next actions for this Project. Zeus and Olympus receive this
+                  durable task state as context.
+                </div>
+              ) : (
+                tasks.slice(0, 12).map((task) => (
+                  <div
+                    className={
+                      task.status === "done"
+                        ? "rail-list-item task-row task-done"
+                        : "rail-list-item task-row"
+                    }
+                    key={task.id}
+                  >
+                    <button
+                      className={"task-status " + task.status}
+                      disabled={taskBusy}
+                      onClick={() => void advanceTask(task)}
+                      aria-label={"Advance task: " + task.title}
+                      title="Advance task status"
+                    >
+                      <TaskStatusIcon status={task.status} />
+                    </button>
+                    <div>
+                      <p>{task.title}</p>
+                      <small>
+                        {task.status.replace("_", " ")} · priority {task.priority}
+                      </small>
+                    </div>
+                    <button
+                      aria-label={"Delete task " + task.title}
+                      disabled={taskBusy}
+                      onClick={() => void removeTask(task.id)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 
