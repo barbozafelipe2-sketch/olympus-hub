@@ -162,6 +162,20 @@ assert(
   "Client history windows are not bounded"
 );
 
+const settingsLibrary = readFileSync(resolve("src/lib/settings.ts"), "utf8");
+const settingsView = readFileSync(
+  resolve("src/components/SettingsView.tsx"),
+  "utf8"
+);
+assert(
+  settingsLibrary.includes('.from("executions")') &&
+    settingsLibrary.includes(".limit(8)") &&
+    settingsView.includes("Recent executions") &&
+    settingsView.includes("Not configured") &&
+    settingsView.includes("Pricing is not assigned"),
+  "Settings must show scoped execution history and an honest no-billing state"
+);
+
 const healthApi = readFileSync(resolve("api/health.js"), "utf8");
 assert(
   healthApi.includes('liveProviderHealth: "not_probed"') &&

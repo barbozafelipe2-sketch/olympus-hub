@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CreditCard,
   Gauge,
   RefreshCcw,
   ShieldCheck,
@@ -10,7 +11,8 @@ import { useEffect, useState } from "react";
 import { deleteCurrentAccount } from "../lib/account";
 import {
   loadAccountSettings,
-  type AccountSettings
+  type AccountSettings,
+  type RecentExecution
 } from "../lib/settings";
 
 type Props = {
@@ -23,6 +25,17 @@ function number(value: number) {
 
 function limit(value: number | null) {
   return value == null ? "Not configured" : number(value);
+}
+
+function executionTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Time unavailable" : date.toLocaleString();
+}
+
+function executionStatus(execution: RecentExecution) {
+  if (execution.status === "failed") return "Failed";
+  if (execution.degraded || execution.status === "degraded") return "Degraded";
+  return "Completed";
 }
 
 export function SettingsView({ email }: Props) {
@@ -81,8 +94,8 @@ export function SettingsView({ email }: Props) {
           <span className="eyebrow">Account & operations</span>
           <h2>Settings</h2>
           <p>
-            Your identity, usage and account lifecycle. OlyHub does not invent plan
-            pricing or quota values that are not configured.
+            Review recorded usage, execution routes and account controls. Plan
+            pricing appears only after billing is configured.
           </p>
         </div>
         <button
@@ -111,8 +124,11 @@ export function SettingsView({ email }: Props) {
             </div>
             <dl className="settings-list">
               <div><dt>Email</dt><dd>{email}</dd></div>
-              <div><dt>Plan</dt><dd>{settings.limits.plan_code}</dd></div>
-              <div><dt>Status</dt><dd>{settings.limits.status}</dd></div>
+              <div>
+                <dt>Plan code</dt>
+                <dd>{settings.limits.plan_code === "unassigned" ? "Unassigned" : settings.limits.plan_code}</dd>
+              </div>
+              <div><dt>Account status</dt><dd>{settings.limits.status}</dd></div>
               <div>
                 <dt>Onboarding</dt>
                 <dd>{settings.profile.onboarding_completed ? "Complete" : "Incomplete"}</dd>
@@ -170,6 +186,57 @@ export function SettingsView({ email }: Props) {
               “Not configured” means the account-specific database limit is empty.
               Deployment-wide server limits may still apply.
             </p>
+          </section>
+
+          <section className="settings-card billing-card">
+            <div className="settings-card-title">
+              <CreditCard size={18} />
+              <div>
+                <strong>Billing</strong>
+                <span>Commercial plan and payment setup</span>
+              </div>
+            </div>
+            <p className="billing-status">Not configured</p>
+            <p className="settings-note">
+              No subscription or payment provider is connected in this build.
+              Pricing is not assigned or displayed until the business model is
+              approved and billing is implemented.
+            </p>
+          </section>
+
+          <section className="settings-card execution-card">
+            <div className="settings-card-title">
+              <Gauge size={18} />
+              <div>
+                <strong>Recent executions</strong>
+                <span>Provider and fallback details recorded for your account</span>
+              </div>
+            </div>
+            {settings.recentExecutions.length === 0 ? (
+              <p className="settings-note">No execution history has been recorded yet.</p>
+            ) : (
+              <ul className="execution-list">
+                {settings.recentExecutions.map((execution) => (
+                  <li key={execution.id}>
+                    <div className="execution-row">
+                      <strong>{execution.mode}</strong>
+                      <span className={"execution-status " + execution.status}>
+                        {executionStatus(execution)}
+                      </span>
+                    </div>
+                    <span className="execution-provider">
+                      {execution.provider} / {execution.model}
+                      {execution.fallback_used ? " · OpenAI fallback used" : ""}
+                    </span>
+                    <span className="execution-meta">
+                      {executionTime(execution.created_at)} · {execution.call_count}{" "}
+                      {execution.call_count === 1 ? "call" : "calls"} ·{" "}
+                      {execution.latency_ms.toLocaleString()} ms
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section className="settings-card danger-card">
