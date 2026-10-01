@@ -16,12 +16,30 @@ export type AttachmentDraft = {
   size: number;
 };
 
+export type ApiTraceEntry = {
+  role: string;
+  provider: string;
+  providerId: string;
+  model: string;
+  requestId: string;
+  fallbackFrom: string | null;
+};
+
+export type ApiOrchestration = {
+  mode: ModeId;
+  calls: number;
+  multiProvider: boolean;
+  degraded: boolean;
+};
+
 export type ApiChatResponse = {
   reply: string;
   requestId: string;
   provider: string;
   model: string;
   fallbackUsed: boolean;
+  trace: ApiTraceEntry[];
+  orchestration: ApiOrchestration;
 };
 
 export const MODES: Array<{
