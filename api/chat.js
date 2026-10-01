@@ -187,6 +187,142 @@ async function recordExecution(client, input) {
   return data?.id ?? null;
 }
 
+
+function positiveEnvLimit(name) {
+  const value = Number(process.env[name]);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function numeric(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
+function remaining(limit, used) {
+  return limit == null ? null : Math.max(0, limit - used);
+}
+
+async function getQuotaStatus(client, userId) {
+  const [limitResult, summaryResult] = await Promise.all([
+    client
+      .from("account_limits")
+      .select(
+        "plan_code, status, daily_request_limit, daily_token_limit, monthly_token_limit"
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    client.rpc("get_my_usage_summary")
+  ]);
+
+  if (limitResult.error) throw limitResult.error;
+  if (summaryResult.error) throw summaryResult.error;
+
+  const account = limitResult.data || {
+    plan_code: "unassigned",
+    status: "active",
+    daily_request_limit: null,
+    daily_token_limit: null,
+    monthly_token_limit: null
+  };
+  const summary = summaryResult.data?.[0] || {
+    daily_requests: 0,
+    daily_tokens: 0,
+    monthly_tokens: 0
+  };
+
+  const limits = {
+    dailyRequests:
+      account.daily_request_limit ??
+      positiveEnvLimit("OLYHUB_DAILY_REQUEST_LIMIT"),
+    dailyTokens:
+      account.daily_token_limit ??
+      positiveEnvLimit("OLYHUB_DAILY_TOKEN_LIMIT"),
+    monthlyTokens:
+      account.monthly_token_limit ??
+      positiveEnvLimit("OLYHUB_MONTHLY_TOKEN_LIMIT")
+  };
+
+  const usage = {
+    dailyRequests: numeric(summary.daily_requests),
+    dailyTokens: numeric(summary.daily_tokens),
+    monthlyTokens: numeric(summary.monthly_tokens)
+  };
+
+  let reason = null;
+  if (account.status !== "active") {
+    reason = "account_not_active";
+  } else if (
+    limits.dailyRequests != null &&
+    usage.dailyRequests >= limits.dailyRequests
+  ) {
+    reason = "daily_request_limit";
+  } else if (
+    limits.dailyTokens != null &&
+    usage.dailyTokens >= limits.dailyTokens
+  ) {
+    reason = "daily_token_limit";
+  } else if (
+    limits.monthlyTokens != null &&
+    usage.monthlyTokens >= limits.monthlyTokens
+  ) {
+    reason = "monthly_token_limit";
+  }
+
+  return {
+    allowed: reason == null,
+    reason,
+    planCode: account.plan_code,
+    status: account.status,
+    limits,
+    usage,
+    remaining: {
+      dailyRequests: remaining(limits.dailyRequests, usage.dailyRequests),
+      dailyTokens: remaining(limits.dailyTokens, usage.dailyTokens),
+      monthlyTokens: remaining(limits.monthlyTokens, usage.monthlyTokens)
+    }
+  };
+}
+
+async function recordUsageEvents(client, {
+  executionId,
+  ownerId,
+  projectId,
+  trace
+}) {
+  if (!executionId || !Array.isArray(trace) || trace.length === 0) return false;
+
+  const rows = trace.map((entry) => {
+    const usage = entry.usage || {};
+    return {
+      owner_id: ownerId,
+      execution_id: executionId,
+      project_id: projectId ?? null,
+      provider: entry.provider || entry.providerId || "unknown",
+      model: entry.model || "unknown",
+      role: entry.role || "model",
+      request_id: entry.requestId || crypto.randomUUID(),
+      input_tokens: numeric(usage.inputTokens),
+      output_tokens: numeric(usage.outputTokens),
+      cached_input_tokens: numeric(usage.cachedInputTokens),
+      cache_write_tokens: numeric(usage.cacheWriteTokens),
+      reasoning_tokens: numeric(usage.reasoningTokens),
+      tool_tokens: numeric(usage.toolTokens),
+      total_tokens: numeric(usage.totalTokens),
+      estimated_cost_microusd: null
+    };
+  });
+
+  const { error } = await client.from("usage_events").insert(rows);
+  if (error) {
+    console.error("OlyHub usage ledger persistence failure", {
+      code: error.code
+    });
+    return false;
+  }
+
+  return true;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -231,6 +367,29 @@ export default async function handler(req, res) {
       error: denied
         ? "Project context is unavailable for this account."
         : "OlyHub could not load project context."
+    });
+  }
+
+  let quota;
+  try {
+    quota = await getQuotaStatus(auth.client, auth.user.id);
+  } catch (error) {
+    console.error("OlyHub quota preflight failure", {
+      userId: auth.user.id,
+      code: error?.code
+    });
+    return res.status(503).json({
+      error: "OlyHub could not verify account usage limits."
+    });
+  }
+
+  if (!quota.allowed) {
+    const accountBlocked = quota.reason === "account_not_active";
+    return res.status(accountBlocked ? 403 : 429).json({
+      error: accountBlocked
+        ? "This OlyHub account is not active."
+        : "This OlyHub account has reached a configured usage limit.",
+      quota
     });
   }
 
@@ -290,12 +449,21 @@ export default async function handler(req, res) {
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
 
+    const usageRecorded = await recordUsageEvents(auth.client, {
+      executionId,
+      ownerId: auth.user.id,
+      projectId: canonicalContext?.project.id ?? null,
+      trace: result.trace
+    });
+
     return res.status(200).json({
       ...result,
       orchestration,
       executionId,
       artifact: artifactCapability.artifact,
-      capabilities
+      capabilities,
+      quota,
+      usageRecorded
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
