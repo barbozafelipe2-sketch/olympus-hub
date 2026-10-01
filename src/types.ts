@@ -2,11 +2,17 @@ export type Role = "user" | "assistant";
 
 export type ModeId = "zeus" | "olympus" | "openai" | "claude" | "google";
 
+export type ApiSource = {
+  title: string;
+  url: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: Role;
   content: string;
   createdAt: string;
+  sources?: ApiSource[];
 };
 
 export type AttachmentDraft = {
@@ -96,6 +102,7 @@ export type ApiChatResponse = {
   orchestration: ApiOrchestration;
   artifact: ApiArtifact | null;
   capabilities: ApiCapabilityTrace[];
+  sources: ApiSource[];
   usage: ApiUsage;
   quota: ApiQuota;
   usageRecorded: boolean;
