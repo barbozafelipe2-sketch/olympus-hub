@@ -655,6 +655,14 @@ select:focus-visible {
   line-height: 1.55;
 }
 
+.projects-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .primary-button {
   min-height: 42px;
   border-radius: 13px;
@@ -726,6 +734,20 @@ select:focus-visible {
 .project-card h3 {
   margin: 24px 0 7px;
   font-size: 15px;
+}
+
+.project-open {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-open:hover {
+  color: var(--accent);
 }
 
 .project-card p {
@@ -846,6 +868,11 @@ select:focus-visible {
   .projects-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .projects-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .project-grid {
@@ -1331,16 +1358,14 @@ select:focus-visible {
   font-size: 10px;
 }
 
-.project-card-clickable {
-  cursor: pointer;
+.project-card-hover {
   transition:
     transform 140ms ease,
     border-color 140ms ease,
     background 140ms ease;
 }
 
-.project-card-clickable:hover,
-.project-card-clickable:focus-visible {
+.project-card-hover:hover {
   transform: translateY(-2px);
   border-color: rgba(240, 201, 106, 0.2);
   background: #111319;
@@ -1996,6 +2021,26 @@ select:focus-visible {
   color: #f5d98f;
   border-color: rgba(240, 201, 106, 0.14);
   background: rgba(240, 201, 106, 0.07);
+}
+
+.recent-chat-load-more {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.recent-chat-load-more:hover:not(:disabled) {
+  border-color: rgba(240, 201, 106, 0.24);
+  color: var(--accent);
+}
+
+.recent-chat-load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .recent-chat span {

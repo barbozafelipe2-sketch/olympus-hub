@@ -14,9 +14,9 @@ The target experience is: **“my work is already here and OlyHub already knows 
 
 - React + TypeScript + Vite.
 - Supabase Auth with per-user Row Level Security.
-- Persistent Home conversations with recent-chat restoration.
+- Persistent Home conversations with paginated history restoration.
 - Persistent Projects with one durable conversation per Project.
-- Deterministic long-history Project checkpoints plus recent canonical messages loaded server-side.
+- Rolling Project checkpoints preserve previously covered history, append new batches, and disclose when the bounded checkpoint must trim its oldest excerpts.
 - Approved Project memory with database limits: 40 items / 15,000 characters per scope.
 - Durable Project tasks; Zeus/Olympus receive the current task state as context.
 - Private Project file upload/download/delete through Supabase Storage.
@@ -59,7 +59,7 @@ OpenAI is the required fallback provider.
 - Direct Claude -> Anthropic when available, otherwise OpenAI fallback.
 - Direct Google AI -> Google when available, otherwise OpenAI fallback.
 - Zeus chooses a route and may add one reviewer for higher-value review cases.
-- Olympus uses multiple specialist calls plus a focused critic and Director when providers are available.
+- Olympus uses distinct specialist providers when available; with fewer than two it returns a Zeus answer marked degraded instead of simulating a council with duplicate calls to one provider.
 
 The UI trace describes what actually ran. Configured credentials are not described as live provider health.
 

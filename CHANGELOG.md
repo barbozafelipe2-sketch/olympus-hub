@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1 - Continuity and capability hardening
+
+### Fixed
+- Project history checkpoints now append only uncovered message ranges, catch up in bounded batches, and preserve prior checkpoint content.
+- A single available provider now causes Olympus to degrade to a truthful Zeus route instead of repeating that provider as multiple specialists.
+- Long Project rails and Home history show all rows fetched for those views rather than silently hiding older items behind display slices.
+- Home history now loads older conversations in pages instead of stopping at the initial recent-chat limit.
+- Archived Projects can now be listed and restored instead of disappearing from the workspace picker.
+- Blob downloads now keep object URLs alive briefly after triggering browser downloads.
+- Chat composers avoid submitting while an input method editor is composing text.
+
+### Validation
+- Added regression coverage for checkpoint continuity, bounded catch-up, checkpoint trimming disclosure and single-provider Olympus behavior.
+
 ## 0.5.0 - Commercial workspace and orchestration
 
 ### Added

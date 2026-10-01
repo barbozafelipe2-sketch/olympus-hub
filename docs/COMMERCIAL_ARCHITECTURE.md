@@ -80,7 +80,7 @@ The browser sends Project/conversation identifiers. The API loads canonical Proj
 
 ### Long history
 
-Project inference uses the most recent canonical messages plus a deterministic checkpoint of older transcript data. Approved memory stays separate and higher-value durable facts/decisions do not depend on an infinite raw transcript.
+Project inference uses the most recent canonical messages plus a rolling deterministic checkpoint of older transcript data. Checkpoint refreshes append from the last covered message in bounded batches, so refreshes do not skip or replace earlier covered excerpts. The checkpoint has a 40,000-character ceiling; when it fills, the oldest excerpts are trimmed and that limit is disclosed in the checkpoint. Approved memory stays separate and higher-value durable facts/decisions do not depend on an infinite raw transcript.
 
 ## Memory
 
@@ -186,11 +186,13 @@ Zeus is the default daily orchestration layer.
 
 Olympus is a real multi-call orchestration mode.
 
-1. Run 2 specialists, or 3 for heavier work.
+1. Run 2 distinct provider specialists, or up to 3 for heavier work.
 2. Keep successful specialist calls if another fails.
 3. Run one focused critic when available.
 4. Director synthesizes one final result.
 5. Persist exact provider/model/request trace.
+
+If fewer than two providers are available, Olympus runs one Zeus route and marks the execution degraded. It does not label repeated calls to one provider as a multi-provider council.
 
 The product does not claim a provider participated unless it appears in the execution trace.
 

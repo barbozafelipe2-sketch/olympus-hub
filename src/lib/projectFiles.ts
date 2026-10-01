@@ -1,4 +1,5 @@
 import type { Database } from "../database.types";
+import { downloadBlob } from "./download";
 import { requireSupabase } from "./supabase";
 
 export type ProjectFileRow =
@@ -119,12 +120,7 @@ export async function downloadProjectFile(file: ProjectFileRow): Promise<void> {
 
   if (error) throw error;
 
-  const url = URL.createObjectURL(data);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.name;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(data, file.name);
 }
 
 export async function deleteProjectFile(file: ProjectFileRow): Promise<void> {

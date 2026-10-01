@@ -7,6 +7,12 @@ import {
   runImageGenerationCapability,
   runWebSearchCapability
 } from "./lib/capabilities.js";
+import {
+  CHECKPOINT_BATCH_SIZE,
+  checkpointRange,
+  mergeCheckpointContent,
+  PROJECT_RECENT_MESSAGES
+} from "./lib/checkpoints.js";
 
 const ModeSchema = z.enum(["zeus", "olympus", "openai", "claude", "google"]);
 
@@ -26,12 +32,6 @@ const BodySchema = z.object({
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1).max(80)
 });
-
-const PROJECT_RECENT_MESSAGES = 24;
-const CHECKPOINT_REFRESH_STEP = 8;
-const CHECKPOINT_SOURCE_WINDOW = 160;
-const CHECKPOINT_MESSAGE_CHARS = 1200;
-const CHECKPOINT_CONTENT_LIMIT = 40000;
 
 function bearerToken(req) {
   const header = req.headers.authorization;
@@ -125,7 +125,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
       .select("name, mime_type, size_bytes, storage_path")
       .eq("project_id", project.id)
       .order("created_at", { ascending: false })
-      .limit(20),
+      .limit(1000),
     client
       .from("project_tasks")
       .select("title, status, priority, due_at")
@@ -217,68 +217,77 @@ async function loadCanonicalHomeConversation(client, conversationId) {
 async function refreshConversationCheckpoint(client, ownerId, context) {
   if (!context) return context;
 
-  const targetCoverage = Math.max(
-    0,
-    context.messageCount - PROJECT_RECENT_MESSAGES
-  );
-
-  if (targetCoverage === 0) {
+  const range = checkpointRange(context.checkpoint, context.messageCount);
+  if (!range) {
     return {
       ...context,
-      checkpoint: null
+      checkpoint:
+        context.messageCount <= PROJECT_RECENT_MESSAGES
+          ? null
+          : context.checkpoint
     };
   }
 
-  const covered = context.checkpoint?.covered_message_count ?? 0;
-  if (
-    context.checkpoint &&
-    targetCoverage - covered < CHECKPOINT_REFRESH_STEP
-  ) {
-    return context;
+  const data = [];
+  for (let start = range.start; start < range.endExclusive; start += CHECKPOINT_BATCH_SIZE) {
+    const endExclusive = Math.min(start + CHECKPOINT_BATCH_SIZE, range.endExclusive);
+    const { data: page, error } = await client
+      .from("messages")
+      .select("role, content, created_at")
+      .eq("conversation_id", context.conversation.id)
+      .order("created_at", { ascending: true })
+      .range(start, endExclusive - 1);
+
+    if (error) throw error;
+    data.push(...(page ?? []));
   }
 
-  const start = Math.max(0, targetCoverage - CHECKPOINT_SOURCE_WINDOW);
-  const { data, error } = await client
-    .from("messages")
-    .select("role, content, created_at")
-    .eq("conversation_id", context.conversation.id)
-    .order("created_at", { ascending: true })
-    .range(start, targetCoverage - 1);
+  const content = mergeCheckpointContent(
+    context.checkpoint?.content ?? "",
+    data
+  );
 
-  if (error) throw error;
+  const checkpointValues = {
+    conversation_id: context.conversation.id,
+    owner_id: ownerId,
+    project_id: context.project.id,
+    content,
+    covered_message_count: range.endExclusive
+  };
+  let saved;
 
-  const compacted = (data ?? [])
-    .map((message) => {
-      const role = message.role === "assistant" ? "ASSISTANT" : "USER";
-      const content = message.content
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, CHECKPOINT_MESSAGE_CHARS);
-      return role + ": " + content;
-    })
-    .join("\n");
+  if (context.checkpoint) {
+    const { data, error } = await client
+      .from("conversation_checkpoints")
+      .update(checkpointValues)
+      .eq("conversation_id", context.conversation.id)
+      .lt("covered_message_count", range.endExclusive)
+      .select("content, covered_message_count")
+      .maybeSingle();
 
-  const content =
-    compacted.length > CHECKPOINT_CONTENT_LIMIT
-      ? compacted.slice(-CHECKPOINT_CONTENT_LIMIT)
-      : compacted;
+    if (error) throw error;
+    saved = data;
+  } else {
+    const { data, error } = await client
+      .from("conversation_checkpoints")
+      .insert(checkpointValues)
+      .select("content, covered_message_count")
+      .maybeSingle();
 
-  const { data: saved, error: saveError } = await client
-    .from("conversation_checkpoints")
-    .upsert(
-      {
-        conversation_id: context.conversation.id,
-        owner_id: ownerId,
-        project_id: context.project.id,
-        content,
-        covered_message_count: targetCoverage
-      },
-      { onConflict: "conversation_id" }
-    )
-    .select("content, covered_message_count")
-    .single();
+    if (error && error.code !== "23505") throw error;
+    saved = data;
+  }
 
-  if (saveError) throw saveError;
+  if (!saved) {
+    const { data, error } = await client
+      .from("conversation_checkpoints")
+      .select("content, covered_message_count")
+      .eq("conversation_id", context.conversation.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    saved = data ?? context.checkpoint;
+  }
 
   return {
     ...context,
@@ -328,6 +337,7 @@ function buildProjectSystemContext(context) {
   const filesBlock = context.files.length
     ? "\nProject files currently stored (metadata only):\n" +
       context.files
+        .slice(0, 20)
         .map(
           (file) =>
             "- " +

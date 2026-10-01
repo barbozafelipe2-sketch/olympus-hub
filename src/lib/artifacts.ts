@@ -1,4 +1,5 @@
 import type { Database } from "../database.types";
+import { downloadBlob } from "./download";
 import { requireSupabase } from "./supabase";
 
 export type ArtifactRow =
@@ -78,8 +79,6 @@ export async function downloadArtifact(artifact: ArtifactRow): Promise<void> {
 
     if (error) throw error;
 
-    const url = URL.createObjectURL(data);
-    const anchor = document.createElement("a");
     const extension =
       file.mime_type === "image/webp"
         ? ".webp"
@@ -87,12 +86,10 @@ export async function downloadArtifact(artifact: ArtifactRow): Promise<void> {
           ? ".jpg"
           : ".png";
 
-    anchor.href = url;
-    anchor.download =
+    const filename =
       artifact.title.replace(/[^a-zA-Z0-9._ -]/g, "_").slice(0, 100) +
       extension;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(data, filename);
     return;
   }
 
@@ -108,8 +105,6 @@ export async function downloadArtifact(artifact: ArtifactRow): Promise<void> {
   const blob = new Blob([data.content], {
     type: artifact.mime_type || "text/markdown"
   });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
   const extension =
     artifact.mime_type === "application/json"
       ? ".json"
@@ -117,12 +112,10 @@ export async function downloadArtifact(artifact: ArtifactRow): Promise<void> {
         ? ".csv"
         : ".md";
 
-  anchor.href = url;
-  anchor.download =
+  const filename =
     artifact.title.replace(/[^a-zA-Z0-9._ -]/g, "_").slice(0, 100) +
     extension;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, filename);
 }
 
 export async function deleteArtifact(artifactId: string): Promise<void> {
