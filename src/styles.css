@@ -1861,3 +1861,66 @@ select:focus-visible {
     width: 100%;
   }
 }
+
+
+/* Persistent Home conversation history */
+
+.new-chat:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recent-chats {
+  min-height: 0;
+  display: grid;
+  gap: 7px;
+  padding: 2px 2px 0;
+}
+
+.recent-chats-label {
+  padding: 0 9px;
+  color: var(--muted-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.recent-chats-list {
+  display: grid;
+  gap: 3px;
+  max-height: 210px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.recent-chat {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-chat:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.recent-chat.active {
+  color: #f5d98f;
+  border-color: rgba(240, 201, 106, 0.14);
+  background: rgba(240, 201, 106, 0.07);
+}
+
+.recent-chat span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 10px;
+}
