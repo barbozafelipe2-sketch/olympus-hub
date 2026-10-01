@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { AuthScreen, BackendSetupRequired } from "./components/AuthScreen";
+import { MessageSources } from "./components/MessageSources";
 import { Onboarding } from "./components/Onboarding";
 import { ProjectWorkspace } from "./components/ProjectWorkspace";
 import { SettingsView } from "./components/SettingsView";
@@ -424,7 +425,8 @@ export default function App() {
           model: result.model,
           fallback_used: result.fallbackUsed,
           orchestration: result.orchestration,
-          trace: result.trace
+          trace: result.trace,
+          sources: result.sources
         }
       });
 
@@ -757,7 +759,10 @@ export default function App() {
                     {message.role === "assistant" && (
                       <div className="message-avatar">Z</div>
                     )}
-                    <div className="message-bubble">{message.content}</div>
+                    <div className="message-bubble">
+                      <div>{message.content}</div>
+                      <MessageSources sources={message.sources} />
+                    </div>
                   </article>
                 ))}
 
