@@ -4,6 +4,10 @@ import { requireSupabase } from "./supabase";
 type SendChatInput = {
   messages: ChatMessage[];
   mode: ModeId;
+  projectContext?: {
+    name: string;
+    goal: string;
+  };
 };
 
 export async function sendChat(
@@ -27,6 +31,7 @@ export async function sendChat(
     },
     body: JSON.stringify({
       mode: input.mode,
+      projectContext: input.projectContext,
       messages: input.messages.map(({ role, content }) => ({ role, content }))
     }),
     signal
