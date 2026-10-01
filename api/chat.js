@@ -1,6 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { executeMode } from "./lib/orchestrator.js";
+import {
+  persistRequestedArtifact,
+  readRequestedProjectFiles
+} from "./lib/capabilities.js";
 
 const ModeSchema = z.enum(["zeus", "olympus", "openai", "claude", "google"]);
 
@@ -102,7 +106,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
       .limit(12),
     client
       .from("project_files")
-      .select("name, mime_type, size_bytes")
+      .select("name, mime_type, size_bytes, storage_path")
       .eq("project_id", project.id)
       .order("created_at", { ascending: false })
       .limit(20)
@@ -231,34 +235,67 @@ export default async function handler(req, res) {
   }
 
   const startedAt = Date.now();
+  const fileCapability = canonicalContext
+    ? await readRequestedProjectFiles({
+        client: auth.client,
+        files: canonicalContext.files,
+        messages
+      })
+    : { context: "", traces: [] };
 
   try {
     const result = await executeMode({
       mode,
       messages,
-      systemContext: buildProjectSystemContext(canonicalContext)
+      systemContext:
+        buildProjectSystemContext(canonicalContext) + fileCapability.context
     });
+
+    const artifactCapability = await persistRequestedArtifact({
+      client: auth.client,
+      context: canonicalContext,
+      messages,
+      result
+    });
+
+    const capabilities = [
+      ...fileCapability.traces,
+      ...artifactCapability.traces
+    ];
+    const capabilityDegraded = capabilities.some(
+      (capability) => capability.status === "failed"
+    );
+    const orchestration = {
+      ...result.orchestration,
+      degraded: result.orchestration.degraded || capabilityDegraded
+    };
 
     const executionId = await recordExecution(auth.client, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
       conversation_id: canonicalContext?.conversation.id ?? null,
       mode,
-      status: result.orchestration.degraded ? "degraded" : "completed",
+      status: orchestration.degraded ? "degraded" : "completed",
       provider: result.provider,
       model: result.model,
       request_id: result.requestId,
       fallback_used: result.fallbackUsed,
-      call_count: result.orchestration.calls,
-      multi_provider: result.orchestration.multiProvider,
-      degraded: result.orchestration.degraded,
-      trace: result.trace,
+      call_count: orchestration.calls,
+      multi_provider: orchestration.multiProvider,
+      degraded: orchestration.degraded,
+      trace: {
+        model_calls: result.trace,
+        capabilities
+      },
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
 
     return res.status(200).json({
       ...result,
-      executionId
+      orchestration,
+      executionId,
+      artifact: artifactCapability.artifact,
+      capabilities
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
@@ -281,14 +318,17 @@ export default async function handler(req, res) {
       call_count: 1,
       multi_provider: false,
       degraded: true,
-      trace: [
-        {
-          role: "failed-route",
-          providerId: error?.provider || "unknown",
-          requestId,
-          status: error?.status || null
-        }
-      ],
+      trace: {
+        model_calls: [
+          {
+            role: "failed-route",
+            providerId: error?.provider || "unknown",
+            requestId,
+            status: error?.status || null
+          }
+        ],
+        capabilities: fileCapability.traces
+      },
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
 
