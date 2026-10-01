@@ -51,7 +51,7 @@ function modelFor(provider) {
   }
 
   if (provider === "anthropic") {
-    return process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+    return process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
   }
 
   return process.env.GOOGLE_AI_MODEL || "gemini-3.8-flash";
@@ -163,7 +163,7 @@ async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
     {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + process.env.ANTHROPIC_API_KEY,
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json"
       },
@@ -211,7 +211,7 @@ async function callGoogle({ system, messages, maxOutputTokens, timeoutMs }) {
     transcript(messages);
 
   const { response, data } = await fetchJson(
-    "https://generativelanguage.googleapis.com/v1/interactions",
+    "https://generativelanguage.googleapis.com/v1beta/interactions",
     {
       method: "POST",
       headers: {
