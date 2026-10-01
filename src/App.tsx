@@ -360,17 +360,8 @@ export default function App() {
 
   async function submit() {
     const text = prompt.trim();
-    if (!text || isSending) return;
+    if (!text || isSending || homeLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: makeId(),
-      role: "user",
-      content: text,
-      createdAt: new Date().toISOString()
-    };
-
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
     setPrompt("");
     setError(null);
     setRunMeta(null);
@@ -378,21 +369,85 @@ export default function App() {
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 90000);
+    let userSaved = false;
 
     try {
+      const conversation = await ensureHomeConversation();
+      const persistedUser = await persistMessage({
+        conversationId: conversation.id,
+        ownerId: userId,
+        role: "user",
+        content: text
+      });
+      userSaved = true;
+
+      const nextMessages = [...messages, persistedUser];
+      setMessages(nextMessages);
+
+      let localConversation = conversation;
+      if (conversation.title === "New chat") {
+        const title =
+          text.replace(/\s+/g, " ").trim().slice(0, 72) || "New chat";
+        await renameConversation(conversation.id, title);
+        localConversation = {
+          ...conversation,
+          title,
+          updated_at: new Date().toISOString()
+        };
+        setActiveHomeConversation(localConversation);
+        setHomeConversations((current) => [
+          localConversation,
+          ...current.filter((item) => item.id !== conversation.id)
+        ]);
+      }
+
       const result = await sendChat(
-        { messages: nextMessages.slice(-40), mode },
+        {
+          messages: nextMessages
+            .filter((message) => message.id !== "welcome")
+            .slice(-40),
+          mode,
+          conversationId: conversation.id
+        },
         controller.signal
       );
 
-      setMessages((current) => [
-        ...current,
-        {
-          id: makeId(),
-          role: "assistant",
-          content: result.reply,
-          createdAt: new Date().toISOString()
+      const assistant = await persistMessage({
+        conversationId: conversation.id,
+        ownerId: userId,
+        role: "assistant",
+        content: result.reply,
+        metadata: {
+          request_id: result.requestId,
+          execution_id: result.executionId,
+          provider: result.provider,
+          model: result.model,
+          fallback_used: result.fallbackUsed,
+          orchestration: result.orchestration,
+          trace: result.trace
         }
+      });
+
+      setMessages((current) => [...current, assistant]);
+
+      if (result.artifact) {
+        const refreshed = await listConversationArtifacts(conversation.id).catch(
+          () => null
+        );
+        if (refreshed) setHomeArtifacts(refreshed);
+      }
+
+      const updatedAt = new Date().toISOString();
+      await touchConversation(conversation.id).catch(() => undefined);
+      const updatedConversation = {
+        ...localConversation,
+        mode,
+        updated_at: updatedAt
+      };
+      setActiveHomeConversation(updatedConversation);
+      setHomeConversations((current) => [
+        updatedConversation,
+        ...current.filter((item) => item.id !== conversation.id)
       ]);
 
       setRunMeta({
@@ -409,16 +464,41 @@ export default function App() {
         usageRecorded: result.usageRecorded
       });
     } catch (err) {
-      const message =
+      const base =
         err instanceof DOMException && err.name === "AbortError"
           ? "The request timed out before the server completed it."
           : err instanceof Error
             ? err.message
             : "Unexpected request failure.";
-      setError(message);
+      setError(userSaved ? "Your message is saved. " + base : base);
     } finally {
       window.clearTimeout(timeout);
       setIsSending(false);
+    }
+  }
+
+  async function downloadHomeArtifact(artifact: ArtifactRow) {
+    setError(null);
+    try {
+      await downloadArtifact(artifact);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to download artifact."
+      );
+    }
+  }
+
+  async function removeHomeArtifact(artifactId: string) {
+    setError(null);
+    try {
+      await deleteArtifact(artifactId);
+      setHomeArtifacts((current) =>
+        current.filter((artifact) => artifact.id !== artifactId)
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to delete artifact."
+      );
     }
   }
 
