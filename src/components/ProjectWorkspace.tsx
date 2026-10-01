@@ -1,5 +1,7 @@
 import {
   ArrowLeft,
+  Brain,
+  Download,
   FileText,
   FolderKanban,
   Paperclip,
@@ -7,7 +9,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  X
+  Trash2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -17,14 +19,24 @@ import {
   setConversationMode,
   touchConversationAndProject
 } from "../lib/conversations";
+import {
+  addProjectMemory,
+  buildMemoryContext,
+  deleteProjectMemory,
+  listProjectMemories,
+  type MemoryKind,
+  type MemoryRow
+} from "../lib/memory";
+import {
+  deleteProjectFile,
+  downloadProjectFile,
+  listProjectFiles,
+  uploadProjectFiles,
+  type ProjectFileRow
+} from "../lib/projectFiles";
 import { sendChat } from "../lib/api";
 import type { ProjectRow } from "../lib/projects";
-import {
-  MODES,
-  type AttachmentDraft,
-  type ChatMessage,
-  type ModeId
-} from "../types";
+import { MODES, type ChatMessage, type ModeId } from "../types";
 
 type RunMeta = {
   provider: string;
@@ -40,9 +52,13 @@ type Props = {
   onProjectTouched: (projectId: string, updatedAt: string) => void;
 };
 
-function makeId() {
-  return crypto.randomUUID();
-}
+const MEMORY_KINDS: Array<{ value: MemoryKind; label: string }> = [
+  { value: "fact", label: "Fact" },
+  { value: "preference", label: "Preference" },
+  { value: "decision", label: "Decision" },
+  { value: "outcome", label: "Outcome" },
+  { value: "instruction", label: "Instruction" }
+];
 
 function isModeId(value: string): value is ModeId {
   return MODES.some((mode) => mode.id === value);
@@ -65,6 +81,13 @@ function projectWelcome(project: ProjectRow): ChatMessage {
   };
 }
 
+function sortMemories(rows: MemoryRow[]) {
+  return [...rows].sort((a, b) => {
+    if (b.importance !== a.importance) return b.importance - a.importance;
+    return b.updated_at.localeCompare(a.updated_at);
+  });
+}
+
 export function ProjectWorkspace({
   project,
   ownerId,
@@ -74,9 +97,15 @@ export function ProjectWorkspace({
   const [mode, setMode] = useState<ModeId>("zeus");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [memories, setMemories] = useState<MemoryRow[]>([]);
+  const [projectFiles, setProjectFiles] = useState<ProjectFileRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const [memoryDraft, setMemoryDraft] = useState("");
+  const [memoryKind, setMemoryKind] = useState<MemoryKind>("fact");
+  const [memoryImportance, setMemoryImportance] = useState(3);
+  const [memoryBusy, setMemoryBusy] = useState(false);
+  const [filesBusy, setFilesBusy] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [retryAvailable, setRetryAvailable] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
@@ -94,34 +123,37 @@ export function ProjectWorkspace({
     setError(null);
     setConversationId(null);
     setMessages([]);
+    setMemories([]);
+    setProjectFiles([]);
 
-    void getOrCreateProjectConversation({
-      ownerId,
-      projectId: project.id,
-      projectName: project.name,
-      mode: "zeus"
-    })
-      .then(async (conversation) => {
-        const savedMode = isModeId(conversation.mode)
-          ? conversation.mode
-          : "zeus";
-
+    void Promise.all([
+      getOrCreateProjectConversation({
+        ownerId,
+        projectId: project.id,
+        projectName: project.name,
+        mode: "zeus"
+      }),
+      listProjectMemories(project.id),
+      listProjectFiles(project.id)
+    ])
+      .then(async ([conversation, savedMemories, savedFiles]) => {
         const savedMessages = await loadConversationMessages(conversation.id);
-
         if (!active) return;
 
-        setMode(savedMode);
+        setMode(isModeId(conversation.mode) ? conversation.mode : "zeus");
         setConversationId(conversation.id);
         setMessages(
           savedMessages.length > 0 ? savedMessages : [projectWelcome(project)]
         );
+        setMemories(sortMemories(savedMemories));
+        setProjectFiles(savedFiles);
       })
       .catch((caught) => {
         if (!active) return;
         setError(
           caught instanceof Error
             ? caught.message
-            : "OlyHub could not restore this project conversation."
+            : "OlyHub could not restore this project."
         );
       })
       .finally(() => {
@@ -144,26 +176,104 @@ export function ProjectWorkspace({
       await setConversationMode(conversationId, nextMode);
     } catch (caught) {
       setMode(previous);
+      setError(caught instanceof Error ? caught.message : "Unable to save mode.");
+    }
+  }
+
+  async function onFilesPicked(files: FileList | null) {
+    if (!files?.length || filesBusy) return;
+
+    setFilesBusy(true);
+    setError(null);
+
+    try {
+      const uploaded = await uploadProjectFiles({
+        ownerId,
+        projectId: project.id,
+        files: Array.from(files)
+      });
+      setProjectFiles((current) => [...uploaded, ...current]);
+
+      const touchedAt = new Date().toISOString();
+      await touchConversationAndProject({
+        conversationId: conversationId ?? "",
+        projectId: project.id
+      }).catch(() => undefined);
+      onProjectTouched(project.id, touchedAt);
+    } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Unable to save mode."
+        caught instanceof Error
+          ? "File upload failed: " + caught.message
+          : "File upload failed."
+      );
+    } finally {
+      setFilesBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function saveMemory() {
+    const content = memoryDraft.trim();
+    if (!content || memoryBusy) return;
+
+    setMemoryBusy(true);
+    setError(null);
+
+    try {
+      const memory = await addProjectMemory({
+        ownerId,
+        projectId: project.id,
+        kind: memoryKind,
+        content,
+        importance: memoryImportance
+      });
+
+      setMemories((current) => sortMemories([memory, ...current]));
+      setMemoryDraft("");
+      setMemoryKind("fact");
+      setMemoryImportance(3);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to save memory."
+      );
+    } finally {
+      setMemoryBusy(false);
+    }
+  }
+
+  async function removeMemory(memoryId: string) {
+    setError(null);
+    try {
+      await deleteProjectMemory(memoryId);
+      setMemories((current) => current.filter((item) => item.id !== memoryId));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to remove memory."
       );
     }
   }
 
-  function onFilesPicked(files: FileList | null) {
-    if (!files) return;
+  async function removeFile(file: ProjectFileRow) {
+    setError(null);
+    try {
+      await deleteProjectFile(file);
+      setProjectFiles((current) => current.filter((item) => item.id !== file.id));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to delete file."
+      );
+    }
+  }
 
-    const next = Array.from(files)
-      .slice(0, 8)
-      .map((file) => ({
-        id: makeId(),
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size
-      }));
-
-    setAttachments((current) => [...current, ...next].slice(0, 8));
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  async function downloadFile(file: ProjectFileRow) {
+    setError(null);
+    try {
+      await downloadProjectFile(file);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to download file."
+      );
+    }
   }
 
   async function generateAssistant(nextMessages: ChatMessage[]) {
@@ -183,7 +293,13 @@ export function ProjectWorkspace({
           mode,
           projectContext: {
             name: project.name,
-            goal: project.goal
+            goal: project.goal,
+            memories: buildMemoryContext(memories),
+            files: projectFiles.slice(0, 20).map((file) => ({
+              name: file.name,
+              mimeType: file.mime_type,
+              sizeBytes: file.size_bytes
+            }))
           },
           messages: nextMessages.filter(
             (message) => !message.id.startsWith("project-welcome-")
@@ -243,15 +359,7 @@ export function ProjectWorkspace({
     const text = prompt.trim();
     if (!text || !conversationId || isSending) return;
 
-    const attachmentNote =
-      attachments.length > 0
-        ? "\n\nAttached locally: " +
-          attachments.map((file) => file.name).join(", ") +
-          ". File upload is not enabled yet."
-        : "";
-
     setPrompt("");
-    setAttachments([]);
     setError(null);
     setRetryAvailable(false);
 
@@ -260,7 +368,7 @@ export function ProjectWorkspace({
         conversationId,
         ownerId,
         role: "user",
-        content: text + attachmentNote
+        content: text
       });
 
       const nextMessages = [...messages, persistedUser];
@@ -279,7 +387,6 @@ export function ProjectWorkspace({
     if (isSending || !conversationId) return;
 
     const latest = await loadConversationMessages(conversationId).catch(() => null);
-
     if (!latest) {
       setError("OlyHub could not reload the saved conversation for retry.");
       return;
@@ -339,10 +446,7 @@ export function ProjectWorkspace({
               </article>
             ) : (
               messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={"message-row " + message.role}
-                >
+                <article key={message.id} className={"message-row " + message.role}>
                   {message.role === "assistant" && (
                     <div className="message-avatar">Z</div>
                   )}
@@ -372,42 +476,21 @@ export function ProjectWorkspace({
           </div>
 
           <div className="composer-wrap">
-            {attachments.length > 0 && (
-              <div className="attachment-strip">
-                {attachments.map((file) => (
-                  <div className="attachment-chip" key={file.id}>
-                    <FileText size={15} />
-                    <span>
-                      {file.name}
-                      <small>{formatBytes(file.size)}</small>
-                    </span>
-                    <button
-                      aria-label={"Remove " + file.name}
-                      onClick={() =>
-                        setAttachments((current) =>
-                          current.filter((item) => item.id !== file.id)
-                        )
-                      }
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
             <div className="composer">
               <input
                 ref={fileInputRef}
                 hidden
                 type="file"
                 multiple
-                onChange={(event) => onFilesPicked(event.target.files)}
+                accept=".pdf,.txt,.md,.csv,.json,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.mp3,.m4a,.wav,.mp4"
+                onChange={(event) => void onFilesPicked(event.target.files)}
               />
               <button
                 className="icon-button"
+                disabled={filesBusy}
                 onClick={() => fileInputRef.current?.click()}
-                aria-label="Attach files"
+                aria-label="Upload files to project"
+                title="Upload files to this project"
               >
                 <Paperclip size={19} />
               </button>
@@ -426,9 +509,7 @@ export function ProjectWorkspace({
               />
               <button
                 className="send-button"
-                disabled={
-                  loading || !conversationId || !prompt.trim() || isSending
-                }
+                disabled={loading || !conversationId || !prompt.trim() || isSending}
                 onClick={() => void submit()}
                 aria-label="Send message"
               >
@@ -436,7 +517,9 @@ export function ProjectWorkspace({
               </button>
             </div>
             <p className="composer-caption">
-              This conversation is stored with the project and restored next time.
+              {filesBusy
+                ? "Uploading project files..."
+                : "Conversation, approved memory and project files persist across sessions."}
             </p>
           </div>
         </div>
@@ -454,28 +537,135 @@ export function ProjectWorkspace({
           </section>
 
           <section className="rail-card">
+            <div className="rail-heading rail-heading-split">
+              <span>
+                <Brain size={17} />
+                <strong>Memory</strong>
+              </span>
+              <small>{memories.length}/40</small>
+            </div>
+
+            <div className="memory-compose">
+              <textarea
+                maxLength={1500}
+                rows={2}
+                value={memoryDraft}
+                onChange={(event) => setMemoryDraft(event.target.value)}
+                placeholder="Something OlyHub should remember for this project..."
+              />
+              <div className="memory-controls">
+                <select
+                  value={memoryKind}
+                  onChange={(event) => setMemoryKind(event.target.value as MemoryKind)}
+                >
+                  {MEMORY_KINDS.map((kind) => (
+                    <option key={kind.value} value={kind.value}>
+                      {kind.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Memory importance"
+                  value={memoryImportance}
+                  onChange={(event) => setMemoryImportance(Number(event.target.value))}
+                >
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <option key={value} value={value}>
+                      Priority {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                className="rail-action"
+                disabled={!memoryDraft.trim() || memoryBusy}
+                onClick={() => void saveMemory()}
+              >
+                {memoryBusy ? "Saving..." : "Remember"}
+              </button>
+            </div>
+
+            <div className="rail-list">
+              {memories.length === 0 ? (
+                <div className="empty-rail">
+                  No approved project memory yet. Limits: 40 items / 15k characters.
+                </div>
+              ) : (
+                memories.slice(0, 8).map((memory) => (
+                  <div className="rail-list-item" key={memory.id}>
+                    <div>
+                      <small>
+                        {memory.kind} · priority {memory.importance}
+                      </small>
+                      <p>{memory.content}</p>
+                    </div>
+                    <button
+                      aria-label="Delete memory"
+                      onClick={() => void removeMemory(memory.id)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="rail-card">
+            <div className="rail-heading rail-heading-split">
+              <span>
+                <FileText size={17} />
+                <strong>Files</strong>
+              </span>
+              <small>{projectFiles.length}</small>
+            </div>
+            <div className="rail-list">
+              {projectFiles.length === 0 ? (
+                <div className="empty-rail">
+                  Use the paperclip to upload private project files, up to 20 MB each.
+                </div>
+              ) : (
+                projectFiles.slice(0, 12).map((file) => (
+                  <div className="rail-list-item file-row" key={file.id}>
+                    <div>
+                      <p>{file.name}</p>
+                      <small>{formatBytes(file.size_bytes)}</small>
+                    </div>
+                    <span className="row-actions">
+                      <button
+                        aria-label={"Download " + file.name}
+                        onClick={() => void downloadFile(file)}
+                      >
+                        <Download size={13} />
+                      </button>
+                      <button
+                        aria-label={"Delete " + file.name}
+                        onClick={() => void removeFile(file)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <p className="rail-footnote">
+              Files are stored privately. Current AI context receives metadata only;
+              content reading will be enabled through the capability layer.
+            </p>
+          </section>
+
+          <section className="rail-card">
             <div className="rail-heading">
               <ShieldCheck size={17} />
               <strong>Last run</strong>
             </div>
             {runMeta ? (
               <dl className="run-grid">
-                <div>
-                  <dt>Provider</dt>
-                  <dd>{runMeta.provider}</dd>
-                </div>
-                <div>
-                  <dt>Model</dt>
-                  <dd>{runMeta.model}</dd>
-                </div>
-                <div>
-                  <dt>Fallback</dt>
-                  <dd>{runMeta.fallbackUsed ? "Used" : "No"}</dd>
-                </div>
-                <div>
-                  <dt>Request</dt>
-                  <dd>{runMeta.requestId.slice(0, 8)}</dd>
-                </div>
+                <div><dt>Provider</dt><dd>{runMeta.provider}</dd></div>
+                <div><dt>Model</dt><dd>{runMeta.model}</dd></div>
+                <div><dt>Fallback</dt><dd>{runMeta.fallbackUsed ? "Used" : "No"}</dd></div>
+                <div><dt>Request</dt><dd>{runMeta.requestId.slice(0, 8)}</dd></div>
               </dl>
             ) : (
               <div className="empty-rail">
