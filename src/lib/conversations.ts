@@ -131,3 +131,64 @@ export async function touchConversationAndProject(input: {
   if (conversationResult.error) throw conversationResult.error;
   if (projectResult.error) throw projectResult.error;
 }
+
+
+export async function listHomeConversations(
+  limit = 8
+): Promise<ConversationRow[]> {
+  const { data, error } = await requireSupabase()
+    .from("conversations")
+    .select("*")
+    .is("project_id", null)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createHomeConversation(input: {
+  ownerId: string;
+  mode: ModeId;
+  title?: string;
+}): Promise<ConversationRow> {
+  const { data, error } = await requireSupabase()
+    .from("conversations")
+    .insert({
+      owner_id: input.ownerId,
+      project_id: null,
+      title: (input.title || "New chat").slice(0, 160),
+      mode: input.mode
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function renameConversation(
+  conversationId: string,
+  title: string
+): Promise<void> {
+  const { error } = await requireSupabase()
+    .from("conversations")
+    .update({
+      title: title.trim().slice(0, 160) || "New chat",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", conversationId);
+
+  if (error) throw error;
+}
+
+export async function touchConversation(
+  conversationId: string
+): Promise<void> {
+  const { error } = await requireSupabase()
+    .from("conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
+  if (error) throw error;
+}
