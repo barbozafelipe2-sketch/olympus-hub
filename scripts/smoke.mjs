@@ -105,3 +105,5 @@ assert(
     accountApi.includes('from("project-files").remove'),
   "Account deletion is not wired to private Storage cleanup + Auth deletion"
 );
+
+console.log("OlyHub smoke: PASS");
