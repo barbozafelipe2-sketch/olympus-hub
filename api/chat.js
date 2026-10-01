@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 const ModeSchema = z.enum(["zeus", "olympus", "openai", "claude", "google"]);
@@ -29,7 +30,9 @@ function extractOutputText(data) {
   const output = Array.isArray(data?.output) ? data.output : [];
   return output
     .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
-    .filter((part) => part?.type === "output_text" && typeof part?.text === "string")
+    .filter(
+      (part) => part?.type === "output_text" && typeof part?.text === "string"
+    )
     .map((part) => part.text)
     .join("\n")
     .trim();
@@ -43,10 +46,46 @@ function requestIdFromHeader(response) {
   );
 }
 
+function bearerToken(req) {
+  const header = req.headers.authorization;
+  if (typeof header !== "string") return null;
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return match?.[1]?.trim() || null;
+}
+
+async function authenticate(req) {
+  const token = bearerToken(req);
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+  if (!token || !supabaseUrl || !publishableKey) return null;
+
+  const authClient = createClient(supabaseUrl, publishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false
+    }
+  });
+
+  const {
+    data: { user },
+    error
+  } = await authClient.auth.getUser(token);
+
+  if (error || !user) return null;
+  return user;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed." });
+  }
+
+  const user = await authenticate(req);
+  if (!user) {
+    return res.status(401).json({ error: "Authentication required." });
   }
 
   const parsed = BodySchema.safeParse(req.body);
@@ -101,6 +140,7 @@ export default async function handler(req, res) {
     if (!response.ok) {
       console.error("OlyHub provider error", {
         requestId,
+        userId: user.id,
         status: response.status,
         type: data?.error?.type
       });
@@ -112,7 +152,10 @@ export default async function handler(req, res) {
 
     const reply = extractOutputText(data);
     if (!reply) {
-      console.error("OlyHub empty provider response", { requestId });
+      console.error("OlyHub empty provider response", {
+        requestId,
+        userId: user.id
+      });
       return res.status(502).json({
         error: "The AI provider returned an empty response.",
         requestId
@@ -129,6 +172,7 @@ export default async function handler(req, res) {
   } catch (error) {
     const timedOut = error instanceof Error && error.name === "AbortError";
     console.error("OlyHub chat failure", {
+      userId: user.id,
       kind: timedOut ? "timeout" : "request_failure"
     });
 
