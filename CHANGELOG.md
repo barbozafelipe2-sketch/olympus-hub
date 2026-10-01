@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.5.0 - Commercial workspace and orchestration
+
+### Added
+- Persistent Home conversations with recent-chat restoration and saved modes.
+- Home and Project versioned artifacts.
+- Deterministic Project conversation checkpoints for long histories.
+- Durable Project task rail with todo/in-progress/done workflow.
+- Project tasks included in canonical AI context.
+- Real OpenAI, Anthropic and Google AI adapters.
+- Zeus routing, OpenAI fallback, conditional reviewer and Director integration.
+- Olympus specialist/critic/Director orchestration.
+- Durable execution traces.
+- Provider-reported token usage aggregation and append-only usage events.
+- Server-side account/global quota preflight.
+- Settings for account state, usage and configured limits.
+- Persistent onboarding.
+- Complete account deletion with private Storage cleanup.
+- Configuration-only health endpoint.
+- PWA manifest, production service worker and install metadata.
+- Capability Broker text/Markdown/CSV/JSON Project file reading.
+
+### Changed
+- Project and Home context are loaded canonically on the server through the authenticated Supabase/RLS context.
+- Home no longer exposes a fake/local-only attachment button.
+- Project browser payloads use bounded history windows.
+- Stored file content is treated as untrusted data.
+- Artifacts revise by appending immutable versions.
+- Health reporting distinguishes configured services from live provider health.
+
+### Security
+- Account deletion admin credential remains server-only.
+- Service worker refuses to cache authenticated API responses.
+- Quotas are checked before provider spend.
+- Private Storage object paths remain bound to authenticated user + Project ownership.
+- No provider is claimed in Zeus/Olympus unless it appears in the actual trace.
+
+### Known release gaps
+- Native iOS packaging and signing are not configured.
+- Billing/pricing is not finalized.
+- Privacy policy and Terms URLs are not supplied.
+- Runtime multi-user E2E account-isolation tests remain.
+- PDF/DOCX/XLSX/PPTX/image/audio/video parsing is not yet available through the Capability Broker.
+
 ## 0.4.0 - Project memory and private files
 
 ### Added
@@ -7,25 +50,14 @@
 - Database-enforced memory budget: maximum 40 items and 15,000 characters per scope.
 - Memory deduplication per owner/scope.
 - Private Supabase Storage bucket for Project files.
-- 20 MB per-file limit and allowlisted analysis-friendly MIME types.
+- 20 MB per-file limit and allowlisted MIME types.
 - Project file upload, list, download and delete UI.
-- Project memory and file metadata included in validated AI context.
-- Smoke coverage for memory/file wiring and grounding safeguards.
 
 ### Security
 - Project memory and file metadata are owner-scoped with RLS.
 - Storage object paths are bound to authenticated user ID and owned Project ID.
 - Storage bucket is private.
-- File content is never claimed as read when only metadata is available.
 - Storage policies were re-audited after fixing a qualified-column shadowing issue before any file data existed.
-
-### Known gaps
-- Stored file contents are not yet passed into model/tool execution.
-- Artifacts are not generated/persisted yet.
-- Account deletion is not implemented yet.
-- Claude and Google adapters are not enabled yet.
-- Olympus is not yet a real multi-model council.
-- Long project histories still need summarization/compaction.
 
 ## 0.3.0 - Project continuity
 
@@ -35,53 +67,24 @@
 - Persistent user and assistant messages.
 - Saved mode per Project conversation.
 - Retry after provider failure without duplicating the saved user message.
-- Validated Project name/goal context passed into the server-side AI request.
 - Provider/model/request metadata stored with assistant messages.
-- Project activity timestamps refreshed after successful responses.
-
-### Changed
-- Project cards now open the persistent conversation directly.
-- CI now treats `main` as the only active commercial branch.
 
 ## 0.2.0 - Supabase commercial foundation
 
 ### Added
-- Supabase Auth sign-in/sign-up flow.
-- Typed Supabase client using the new publishable-key pattern.
-- Persistent Projects backed by Postgres.
-- RLS-protected tables for profiles, projects, conversations, messages and project tasks.
-- Private-schema helper functions and user-profile trigger.
+- Supabase Auth sign-in/sign-up.
+- Persistent Projects.
+- RLS-protected core tables.
 - Generated database TypeScript types.
-- Tracked SQL migration files.
-- Product strategy document focused on durable work instead of model aggregation.
+- Tracked SQL migrations.
 - Authenticated bearer token on `/api/chat`.
-
-### Security
-- Every public product table has RLS enabled.
-- Anonymous table access is revoked.
-- Project/message/task policies validate ownership with `auth.uid()`.
-- The AI route verifies the bearer token with Supabase Auth before spending provider tokens.
-- No service-role or secret Supabase key is used in the browser.
-- User-editable metadata is not used for authorization.
 
 ## 0.1.0 - Commercial React foundation
 
 ### Added
-- React + TypeScript + Vite application foundation.
-- Commercial OlyHub Home and Projects surfaces.
-- Five-mode product selector.
-- Local attachment selection UI and artifact rail.
-- Zod-validated server chat contract.
-- OpenAI Responses API foundation route.
+- React + TypeScript + Vite foundation.
+- OlyHub Home and Projects surfaces.
+- Server chat contract.
 - Root Vercel configuration.
-- CI typecheck/build workflow.
+- CI typecheck/build.
 - Commercial architecture and repository-separation documentation.
-
-### Changed
-- Replaced the single-file Pegasus mock shell with an OlyHub React entrypoint.
-- Removed client ability to inject a system prompt into the provider request.
-
-### Security
-- Provider keys remain server-only.
-- Provider error bodies are not returned directly to customers.
-- Client payload size and roles are validated.
