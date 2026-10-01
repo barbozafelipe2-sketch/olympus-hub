@@ -108,6 +108,67 @@ function anthropicText(data) {
     .trim();
 }
 
+function numberOrZero(value) {
+  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+}
+
+function openAIUsage(data) {
+  const usage = data?.usage || {};
+  const inputTokens = numberOrZero(usage.input_tokens);
+  const outputTokens = numberOrZero(usage.output_tokens);
+
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: numberOrZero(usage.input_tokens_details?.cached_tokens),
+    cacheWriteTokens: 0,
+    reasoningTokens: numberOrZero(
+      usage.output_tokens_details?.reasoning_tokens
+    ),
+    toolTokens: 0,
+    totalTokens: numberOrZero(usage.total_tokens) || inputTokens + outputTokens
+  };
+}
+
+function anthropicUsage(data) {
+  const usage = data?.usage || {};
+  const inputTokens = numberOrZero(usage.input_tokens);
+  const outputTokens = numberOrZero(usage.output_tokens);
+  const cachedInputTokens = numberOrZero(usage.cache_read_input_tokens);
+  const cacheWriteTokens = numberOrZero(usage.cache_creation_input_tokens);
+
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    cacheWriteTokens,
+    reasoningTokens: 0,
+    toolTokens: 0,
+    totalTokens:
+      inputTokens + outputTokens + cachedInputTokens + cacheWriteTokens
+  };
+}
+
+function googleUsage(data) {
+  const usage = data?.usage || {};
+  const inputTokens = numberOrZero(usage.total_input_tokens);
+  const outputTokens = numberOrZero(usage.total_output_tokens);
+  const reasoningTokens = numberOrZero(usage.total_thought_tokens);
+  const toolTokens = numberOrZero(usage.total_tool_use_tokens);
+
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: numberOrZero(usage.total_cached_tokens),
+    cacheWriteTokens: 0,
+    reasoningTokens,
+    toolTokens,
+    totalTokens:
+      numberOrZero(usage.total_tokens) ||
+      inputTokens + outputTokens + reasoningTokens
+  };
+}
+
 function googleText(data) {
   return (Array.isArray(data?.steps) ? data.steps : [])
     .filter((step) => step?.type === "model_output")
@@ -153,7 +214,14 @@ async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs }) {
   const text = openAIText(data);
   if (!text) throw new Error("OpenAI returned an empty response.");
 
-  return { text, provider: "OpenAI", providerId: "openai", model, requestId: id };
+  return {
+    text,
+    provider: "OpenAI",
+    providerId: "openai",
+    model,
+    requestId: id,
+    usage: openAIUsage(data)
+  };
 }
 
 async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
@@ -197,7 +265,8 @@ async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
     provider: "Anthropic",
     providerId: "anthropic",
     model: data?.model || model,
-    requestId: id
+    requestId: id,
+    usage: anthropicUsage(data)
   };
 }
 
@@ -247,7 +316,8 @@ async function callGoogle({ system, messages, maxOutputTokens, timeoutMs }) {
     provider: "Google AI",
     providerId: "google",
     model: data?.model || model,
-    requestId: id
+    requestId: id,
+    usage: googleUsage(data)
   };
 }
 
