@@ -51,7 +51,8 @@ export async function sendChat(
     !data.provider ||
     !data.model ||
     !Array.isArray(data.trace) ||
-    !data.orchestration
+    !data.orchestration ||
+    !("executionId" in data)
   ) {
     throw new Error("OlyHub received an invalid response from the server.");
   }
