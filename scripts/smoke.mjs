@@ -43,6 +43,8 @@ for (const path of [
   "supabase/migrations/20261001154043_usage_ledger_and_account_limits.sql",
   "supabase/migrations/20261001154212_usage_quota_summary_rpc.sql",
   "supabase/migrations/20261001173347_profile_onboarding_state.sql",
+  "supabase/migrations/20261001174355_conversation_checkpoints.sql",
+  "api/health.js",
   "api/lib/capabilities.js"
 ]) {
   assert(existsSync(resolve(path)), path + " is missing");
@@ -90,7 +92,7 @@ assert(
   "Zeus/Olympus orchestration is not wired"
 );
 
-console.log("OlyHub smoke: PASS");
+
 
 
 const appSource = readFileSync(resolve("src/App.tsx"), "utf8");
@@ -109,7 +111,7 @@ assert(
   "Account deletion is not wired to private Storage cleanup + Auth deletion"
 );
 
-console.log("OlyHub smoke: PASS");
+
 
 
 const mainSource = readFileSync(resolve("src/main.tsx"), "utf8");
@@ -130,6 +132,29 @@ assert(
   serviceWorker.includes('url.pathname.startsWith("/api/")') &&
     !serviceWorker.includes('cache.put("/api/'),
   "Service worker must never cache authenticated API responses"
+);
+
+
+
+
+assert(
+  chatApi.includes("refreshConversationCheckpoint") &&
+    chatApi.includes('from("conversation_checkpoints")') &&
+    chatApi.includes("recentMessages"),
+  "Project long-history checkpointing is not wired"
+);
+
+assert(
+  projectWorkspace.includes(".slice(-24)") &&
+    appSource.includes("nextMessages.slice(-40)"),
+  "Client history windows are not bounded"
+);
+
+const healthApi = readFileSync(resolve("api/health.js"), "utf8");
+assert(
+  healthApi.includes('liveProviderHealth: "not_probed"') &&
+    healthApi.includes("deploymentStatus"),
+  "Health endpoint must distinguish configuration from live provider health"
 );
 
 console.log("OlyHub smoke: PASS");
