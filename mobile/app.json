@@ -105,7 +105,8 @@
           "imageWidth": 180,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

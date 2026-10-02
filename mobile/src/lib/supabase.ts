@@ -1,15 +1,47 @@
 import "expo-sqlite/localStorage/install";
-import { AppState } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { AppState, Platform } from "react-native";
 import { createClient } from "@supabase/supabase-js";
+import { createSecureAuthStorage } from "./secure-auth-storage";
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
 const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+
+const legacySessionStorage = {
+  async getItem(storageKey: string) {
+    return localStorage.getItem(storageKey);
+  },
+  async setItem(storageKey: string, value: string) {
+    localStorage.setItem(storageKey, value);
+  },
+  async removeItem(storageKey: string) {
+    localStorage.removeItem(storageKey);
+  },
+};
+
+const secureSessionStorage = createSecureAuthStorage(
+  {
+    getItem: (storageKey) =>
+      SecureStore.getItemAsync(storageKey, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      }),
+    setItem: (storageKey, value) =>
+      SecureStore.setItemAsync(storageKey, value, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      }),
+    removeItem: (storageKey) =>
+      SecureStore.deleteItemAsync(storageKey, {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      }),
+  },
+  legacySessionStorage
+);
 
 export const supabase =
   url && key
     ? createClient(url, key, {
         auth: {
-          storage: localStorage,
+          storage: Platform.OS === "web" ? localStorage : secureSessionStorage,
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: false,
