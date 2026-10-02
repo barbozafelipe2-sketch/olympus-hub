@@ -655,6 +655,14 @@ select:focus-visible {
   line-height: 1.55;
 }
 
+.projects-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .primary-button {
   min-height: 42px;
   border-radius: 13px;
@@ -726,6 +734,20 @@ select:focus-visible {
 .project-card h3 {
   margin: 24px 0 7px;
   font-size: 15px;
+}
+
+.project-open {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-open:hover {
+  color: var(--accent);
 }
 
 .project-card p {
@@ -846,6 +868,11 @@ select:focus-visible {
   .projects-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .projects-heading-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .project-grid {
@@ -1331,16 +1358,14 @@ select:focus-visible {
   font-size: 10px;
 }
 
-.project-card-clickable {
-  cursor: pointer;
+.project-card-hover {
   transition:
     transform 140ms ease,
     border-color 140ms ease,
     background 140ms ease;
 }
 
-.project-card-clickable:hover,
-.project-card-clickable:focus-visible {
+.project-card-hover:hover {
   transform: translateY(-2px);
   border-color: rgba(240, 201, 106, 0.2);
   background: #111319;
@@ -1648,6 +1673,87 @@ select:focus-visible {
   overflow-wrap: anywhere;
 }
 
+
+.billing-card .settings-card-title svg {
+  color: var(--accent);
+}
+
+.billing-status {
+  display: inline-flex;
+  align-items: center;
+  margin: 22px 0 0;
+  border: 1px solid rgba(240, 201, 106, 0.2);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: var(--accent-soft);
+  color: #f5d98f;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.execution-card {
+  grid-column: 1 / -1;
+}
+
+.execution-list {
+  list-style: none;
+  display: grid;
+  gap: 0;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.execution-list li {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+}
+
+.execution-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.execution-status {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 9px;
+  text-transform: none;
+}
+
+.execution-status.completed {
+  color: #a5e2bf;
+  background: rgba(80, 190, 120, 0.11);
+}
+
+.execution-status.degraded {
+  color: #f1cf7c;
+  background: rgba(240, 201, 106, 0.11);
+}
+
+.execution-status.failed {
+  color: #ffb0b6;
+  background: rgba(255, 124, 133, 0.11);
+}
+
+.execution-provider,
+.execution-meta {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.execution-meta {
+  color: var(--muted-2);
+}
+
 .settings-note {
   margin: 14px 0 0;
   color: var(--muted-2);
@@ -1915,6 +2021,26 @@ select:focus-visible {
   color: #f5d98f;
   border-color: rgba(240, 201, 106, 0.14);
   background: rgba(240, 201, 106, 0.07);
+}
+
+.recent-chat-load-more {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.recent-chat-load-more:hover:not(:disabled) {
+  border-color: rgba(240, 201, 106, 0.24);
+  color: var(--accent);
+}
+
+.recent-chat-load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .recent-chat span {

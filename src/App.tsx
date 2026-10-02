@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  RotateCcw,
   Settings2,
   Send,
   ShieldCheck,
@@ -41,9 +42,9 @@ import {
   type ConversationRow
 } from "./lib/conversations";
 import {
-  archiveProject,
   createProject,
   listProjects,
+  setProjectStatus,
   type ProjectRow
 } from "./lib/projects";
 import { getOnboardingState } from "./lib/settings";
@@ -55,6 +56,7 @@ import {
 } from "./types";
 
 type View = "home" | "projects" | "settings";
+type ProjectStatusFilter = "active" | "archived";
 
 type RunMeta = {
   provider: string;
@@ -100,12 +102,17 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [prompt, setPrompt] = useState("");
   const [homeConversations, setHomeConversations] = useState<ConversationRow[]>([]);
+  const [hasOlderHomeConversations, setHasOlderHomeConversations] = useState(false);
+  const [loadingOlderHomeConversations, setLoadingOlderHomeConversations] =
+    useState(false);
   const [activeHomeConversation, setActiveHomeConversation] =
     useState<ConversationRow | null>(null);
   const [homeArtifacts, setHomeArtifacts] = useState<ArtifactRow[]>([]);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeChatBusy, setHomeChatBusy] = useState(false);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [projectStatusFilter, setProjectStatusFilter] =
+    useState<ProjectStatusFilter>("active");
   const [selectedProject, setSelectedProject] = useState<ProjectRow | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
@@ -130,6 +137,7 @@ export default function App() {
       setProjects([]);
       setSelectedProject(null);
       setHomeConversations([]);
+      setHasOlderHomeConversations(false);
       setActiveHomeConversation(null);
       setHomeArtifacts([]);
       setMessages(initialMessages);
@@ -141,7 +149,8 @@ export default function App() {
     setProjectsLoading(true);
     setProjectError(null);
 
-    void listProjects()
+    setProjects([]);
+    void listProjects(projectStatusFilter)
       .then((rows) => {
         if (active) setProjects(rows);
       })
@@ -158,7 +167,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [user?.id]);
+  }, [user?.id, projectStatusFilter]);
 
   useEffect(() => {
     if (!user) return;
@@ -171,6 +180,7 @@ export default function App() {
         if (!active) return;
 
         setHomeConversations(rows);
+        setHasOlderHomeConversations(rows.length === 50);
         const latest = rows[0] ?? null;
 
         if (!latest) {
@@ -300,6 +310,28 @@ export default function App() {
       );
     } finally {
       setHomeLoading(false);
+    }
+  }
+
+  async function loadOlderHomeConversations() {
+    if (loadingOlderHomeConversations || !hasOlderHomeConversations) return;
+
+    setLoadingOlderHomeConversations(true);
+    try {
+      const rows = await listHomeConversations(50, homeConversations.length);
+      setHomeConversations((current) => {
+        const known = new Set(current.map((conversation) => conversation.id));
+        return [...current, ...rows.filter((conversation) => !known.has(conversation.id))];
+      });
+      setHasOlderHomeConversations(rows.length === 50);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to load older Home conversations."
+      );
+    } finally {
+      setLoadingOlderHomeConversations(false);
     }
   }
 
@@ -520,6 +552,7 @@ export default function App() {
         goal: projectGoal
       });
 
+      setProjectStatusFilter("active");
       setProjects((current) => [project, ...current]);
       setSelectedProject(project);
       setView("projects");
@@ -535,20 +568,22 @@ export default function App() {
     }
   }
 
-  async function removeProject(projectId: string) {
+  async function changeProjectStatus(
+    projectId: string,
+    nextStatus: ProjectStatusFilter
+  ) {
     setProjectError(null);
 
     try {
-      await archiveProject(projectId);
+      await setProjectStatus(projectId, nextStatus);
       setProjects((current) =>
         current.filter((project) => project.id !== projectId)
       );
-      setSelectedProject((current) =>
-        current?.id === projectId ? null : current
-      );
     } catch (caught) {
       setProjectError(
-        caught instanceof Error ? caught.message : "Unable to archive project."
+        caught instanceof Error
+          ? caught.message
+          : "Unable to update project status."
       );
     }
   }
@@ -614,7 +649,7 @@ export default function App() {
           <section className="recent-chats">
             <span className="recent-chats-label">Recent</span>
             <div className="recent-chats-list">
-              {homeConversations.slice(0, 6).map((conversation) => (
+              {homeConversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   className={
@@ -629,6 +664,15 @@ export default function App() {
                   <span>{conversation.title}</span>
                 </button>
               ))}
+              {hasOlderHomeConversations && (
+                <button
+                  className="recent-chat-load-more"
+                  disabled={loadingOlderHomeConversations}
+                  onClick={() => void loadOlderHomeConversations()}
+                >
+                  {loadingOlderHomeConversations ? "Loading..." : "Load older"}
+                </button>
+              )}
             </div>
           </section>
         )}
@@ -791,7 +835,11 @@ export default function App() {
                     disabled={homeLoading}
                     onChange={(event) => setPrompt(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
+                      if (
+                        event.key === "Enter" &&
+                        !event.shiftKey &&
+                        !event.nativeEvent.isComposing
+                      ) {
                         event.preventDefault();
                         void submit();
                       }
@@ -829,7 +877,7 @@ export default function App() {
                       Ask OlyHub to create a document, report, plan, code file or other explicit deliverable.
                     </div>
                   ) : (
-                    homeArtifacts.slice(0, 10).map((artifact) => (
+                    homeArtifacts.map((artifact) => (
                       <div className="rail-list-item file-row" key={artifact.id}>
                         <div className="artifact-copy">
                           <ArtifactPreview artifact={artifact} />
@@ -925,22 +973,35 @@ export default function App() {
             <div className="projects-heading">
               <div>
                 <span className="eyebrow">Durable workspaces</span>
-                <h2>Projects</h2>
+                <h2>{projectStatusFilter === "active" ? "Projects" : "Archived projects"}</h2>
                 <p>
-                  Projects are stored in Supabase and isolated by user with
-                  row-level security.
+                  {projectStatusFilter === "active"
+                    ? "Projects are stored in Supabase and isolated by user with row-level security."
+                    : "Archived Projects stay saved and can be restored at any time."}
                 </p>
               </div>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setProjectError(null);
-                  setProjectDialogOpen(true);
-                }}
-              >
-                <Plus size={17} />
-                New project
-              </button>
+              <div className="projects-heading-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => setProjectStatusFilter((current) =>
+                    current === "active" ? "archived" : "active"
+                  )}
+                >
+                  {projectStatusFilter === "active" ? "View archived" : "Active projects"}
+                </button>
+                {projectStatusFilter === "active" && (
+                  <button
+                    className="primary-button"
+                    onClick={() => {
+                      setProjectError(null);
+                      setProjectDialogOpen(true);
+                    }}
+                  >
+                    <Plus size={17} />
+                    New project
+                  </button>
+                )}
+              </div>
             </div>
 
             {projectError && <div className="projects-error">{projectError}</div>}
@@ -953,30 +1014,27 @@ export default function App() {
             ) : projects.length === 0 ? (
               <div className="project-empty">
                 <FolderKanban size={32} />
-                <h3>No projects yet</h3>
-                <p>Create a workspace for work that needs continuity.</p>
-                <button
-                  className="primary-button"
-                  onClick={() => setProjectDialogOpen(true)}
-                >
-                  Create first project
-                </button>
+                <h3>{projectStatusFilter === "active" ? "No projects yet" : "No archived projects"}</h3>
+                {projectStatusFilter === "active" ? (
+                  <>
+                    <p>Create a workspace for work that needs continuity.</p>
+                    <button
+                      className="primary-button"
+                      onClick={() => setProjectDialogOpen(true)}
+                    >
+                      Create first project
+                    </button>
+                  </>
+                ) : (
+                  <p>Projects you archive will remain available here.</p>
+                )}
               </div>
             ) : (
               <div className="project-grid">
                 {projects.map((project) => (
                   <article
-                    className="project-card project-card-clickable"
+                    className="project-card project-card-hover"
                     key={project.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedProject(project)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelectedProject(project);
-                      }
-                    }}
                   >
                     <div className="project-card-top">
                       <div className="project-icon">
@@ -986,15 +1044,25 @@ export default function App() {
                         className="project-archive"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void removeProject(project.id);
+                          void changeProjectStatus(
+                            project.id,
+                            projectStatusFilter === "active" ? "archived" : "active"
+                          );
                         }}
-                        aria-label={"Archive " + project.name}
-                        title="Archive project"
+                        aria-label={(projectStatusFilter === "active" ? "Archive " : "Restore ") + project.name}
+                        title={projectStatusFilter === "active" ? "Archive project" : "Restore project"}
                       >
-                        <Archive size={15} />
+                        {projectStatusFilter === "active" ? <Archive size={15} /> : <RotateCcw size={15} />}
                       </button>
                     </div>
-                    <h3>{project.name}</h3>
+                    <h3>
+                      <button
+                        className="project-open"
+                        onClick={() => setSelectedProject(project)}
+                      >
+                        {project.name}
+                      </button>
+                    </h3>
                     <p>{project.goal || "No goal defined yet."}</p>
                     <span>Updated {formatUpdatedAt(project.updated_at)}</span>
                   </article>

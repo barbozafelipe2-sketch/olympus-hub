@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { removeOwnedStorageObjects } from "./lib/storage-cleanup.js";
 
 const DeleteBody = z.object({
   confirmation: z.literal("DELETE MY ACCOUNT")
@@ -45,37 +46,6 @@ function adminClient() {
   });
 }
 
-async function listOwnedStoragePaths(client) {
-  const paths = [];
-  const pageSize = 500;
-
-  for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await client
-      .from("project_files")
-      .select("storage_path")
-      .order("created_at", { ascending: true })
-      .range(offset, offset + pageSize - 1);
-
-    if (error) throw error;
-    const rows = data ?? [];
-    paths.push(...rows.map((row) => row.storage_path));
-
-    if (rows.length < pageSize) break;
-  }
-
-  return paths;
-}
-
-async function deleteStorageObjects(client, paths) {
-  const batchSize = 100;
-
-  for (let index = 0; index < paths.length; index += batchSize) {
-    const batch = paths.slice(index, index + batchSize);
-    const { error } = await client.storage.from("project-files").remove(batch);
-    if (error) throw error;
-  }
-}
-
 export default async function handler(req, res) {
   if (req.method !== "DELETE") {
     res.setHeader("Allow", "DELETE");
@@ -114,15 +84,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    const paths = await listOwnedStoragePaths(client);
-    await deleteStorageObjects(client, paths);
+    const [projectFilesDeleted, artifactFilesDeleted] = await Promise.all([
+      removeOwnedStorageObjects(admin, "project-files", user.id),
+      removeOwnedStorageObjects(admin, "artifact-files", user.id)
+    ]);
 
     const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
     if (deleteError) throw deleteError;
 
     return res.status(200).json({
       deleted: true,
-      storageObjectsDeleted: paths.length
+      storageObjectsDeleted: projectFilesDeleted + artifactFilesDeleted
     });
   } catch (error) {
     console.error("OlyHub account deletion failure", {

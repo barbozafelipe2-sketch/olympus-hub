@@ -7,6 +7,20 @@ export type ProfileRow =
 export type AccountLimitRow =
   Database["public"]["Tables"]["account_limits"]["Row"];
 
+export type RecentExecution = Pick<
+  Database["public"]["Tables"]["executions"]["Row"],
+  | "id"
+  | "mode"
+  | "status"
+  | "provider"
+  | "model"
+  | "fallback_used"
+  | "call_count"
+  | "degraded"
+  | "latency_ms"
+  | "created_at"
+>;
+
 export type UsageSummary = {
   dailyRequests: number;
   dailyTokens: number;
@@ -17,6 +31,7 @@ export type AccountSettings = {
   profile: ProfileRow;
   limits: AccountLimitRow;
   usage: UsageSummary;
+  recentExecutions: RecentExecution[];
 };
 
 function numberOrZero(value: unknown) {
@@ -35,15 +50,24 @@ export async function loadAccountSettings(): Promise<AccountSettings> {
     throw new Error("Your OlyHub session is no longer valid.");
   }
 
-  const [profileResult, limitsResult, usageResult] = await Promise.all([
-    client.from("profiles").select("*").eq("id", user.id).single(),
-    client.from("account_limits").select("*").eq("user_id", user.id).single(),
-    client.rpc("get_my_usage_summary")
-  ]);
+  const [profileResult, limitsResult, usageResult, executionsResult] =
+    await Promise.all([
+      client.from("profiles").select("*").eq("id", user.id).single(),
+      client.from("account_limits").select("*").eq("user_id", user.id).single(),
+      client.rpc("get_my_usage_summary"),
+      client
+        .from("executions")
+        .select(
+          "id,mode,status,provider,model,fallback_used,call_count,degraded,latency_ms,created_at"
+        )
+        .order("created_at", { ascending: false })
+        .limit(8)
+    ]);
 
   if (profileResult.error) throw profileResult.error;
   if (limitsResult.error) throw limitsResult.error;
   if (usageResult.error) throw usageResult.error;
+  if (executionsResult.error) throw executionsResult.error;
 
   const summary = usageResult.data?.[0];
 
@@ -54,7 +78,8 @@ export async function loadAccountSettings(): Promise<AccountSettings> {
       dailyRequests: numberOrZero(summary?.daily_requests),
       dailyTokens: numberOrZero(summary?.daily_tokens),
       monthlyTokens: numberOrZero(summary?.monthly_tokens)
-    }
+    },
+    recentExecutions: executionsResult.data ?? []
   };
 }
 
@@ -62,7 +87,6 @@ export async function completeOnboarding(): Promise<void> {
   const { error } = await requireSupabase().rpc("complete_my_onboarding");
   if (error) throw error;
 }
-
 
 export async function getOnboardingState(): Promise<boolean> {
   const client = requireSupabase();

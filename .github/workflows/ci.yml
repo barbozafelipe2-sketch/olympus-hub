@@ -10,6 +10,42 @@ permissions:
   contents: read
 
 jobs:
+  mobile:
+    name: Native iOS client
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install native dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck native app
+        run: npm run typecheck
+
+      - name: Expo configuration and dependency audit
+        run: npm run doctor
+
+      - name: Expo SDK version compatibility
+        run: npx expo install --check
+
+      - name: Generate native iOS project and privacy manifest
+        run: npx expo prebuild --platform ios --no-install && test -f ios/OlyHub/PrivacyInfo.xcprivacy
+
+      - name: Export iOS JavaScript bundle
+        run: npx expo export --platform ios --output-dir dist/ios
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -25,6 +61,9 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Unit tests
+        run: npm test
 
       - name: Typecheck
         run: npm run typecheck

@@ -8,8 +8,23 @@
   "orientation": "any",
   "background_color": "#07080b",
   "theme_color": "#08090d",
-  "categories": ["productivity", "utilities"],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "icons": [
+    {
+      "src": "/icons/olyhub-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/olyhub-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icons/olyhub.svg",
       "sizes": "any",

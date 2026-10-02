@@ -171,14 +171,15 @@ export async function touchConversationAndProject(input: {
 
 
 export async function listHomeConversations(
-  limit = 8
+  limit = 50,
+  offset = 0
 ): Promise<ConversationRow[]> {
   const { data, error } = await requireSupabase()
     .from("conversations")
     .select("*")
     .is("project_id", null)
     .order("updated_at", { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
 
   if (error) throw error;
   return data ?? [];

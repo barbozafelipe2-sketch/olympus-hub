@@ -131,18 +131,10 @@ function heavyOlympus(messages) {
 
 function pickSpecialistProviders(count) {
   const available = configuredProviders();
-  if (available.length === 0) return ["openai"];
-
   const preferred = ["openai", "anthropic", "google"].filter((provider) =>
     available.includes(provider)
   );
-  const selected = [];
-
-  for (let i = 0; i < count; i += 1) {
-    selected.push(preferred[i % preferred.length]);
-  }
-
-  return selected;
+  return preferred.slice(0, count);
 }
 
 async function executeDirect(mode, systemContext, messages) {
@@ -294,6 +286,19 @@ async function executeZeus(systemContext, messages) {
 async function executeOlympus(systemContext, messages) {
   const specialistCount = heavyOlympus(messages) ? 3 : 2;
   const providers = pickSpecialistProviders(specialistCount);
+
+  if (providers.length < 2) {
+    const singleRoute = await executeZeus(systemContext, messages);
+    return {
+      ...singleRoute,
+      orchestration: {
+        ...singleRoute.orchestration,
+        mode: "olympus",
+        degraded: true
+      }
+    };
+  }
+
   const roles = [
     "Lead specialist: solve the request completely and concretely.",
     "Critical specialist: independently solve it, challenge assumptions, and hunt for failure modes.",
@@ -325,6 +330,9 @@ async function executeOlympus(systemContext, messages) {
 
   const trace = successful.flatMap((item) => item.trace);
   let fallbackUsed = successful.some((item) => item.fallbackUsed);
+  const specialistProviderCount = new Set(
+    successful.map((item) => item.result.providerId)
+  ).size;
   const candidateText = successful
     .map(
       (item, index) =>
@@ -396,7 +404,10 @@ async function executeOlympus(systemContext, messages) {
       mode: "olympus",
       calls: trace.length,
       multiProvider: new Set(trace.map((item) => item.providerId)).size > 1,
-      degraded: successful.length < specialistCount
+      degraded:
+        successful.length < specialistCount ||
+        providers.length < specialistCount ||
+        specialistProviderCount < 2
     }
   };
 }

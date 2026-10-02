@@ -42,6 +42,7 @@ import {
   deleteProjectFile,
   downloadProjectFile,
   listProjectFiles,
+  ProjectFileUploadError,
   uploadProjectFiles,
   type ProjectFileRow
 } from "../lib/projectFiles";
@@ -274,6 +275,10 @@ export function ProjectWorkspace({
       }
       onProjectTouched(project.id, touchedAt);
     } catch (caught) {
+      if (caught instanceof ProjectFileUploadError) {
+        const refreshedFiles = await listProjectFiles(project.id).catch(() => null);
+        if (refreshedFiles) setProjectFiles(refreshedFiles);
+      }
       setError(
         caught instanceof Error
           ? "File upload failed: " + caught.message
@@ -683,7 +688,11 @@ export function ProjectWorkspace({
                 disabled={loading || !conversationId}
                 onChange={(event) => setPrompt(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
                     event.preventDefault();
                     void submit();
                   }
@@ -762,7 +771,7 @@ export function ProjectWorkspace({
                   durable task state as context.
                 </div>
               ) : (
-                tasks.slice(0, 12).map((task) => (
+                tasks.map((task) => (
                   <div
                     className={
                       task.status === "done"
@@ -854,7 +863,7 @@ export function ProjectWorkspace({
                   No approved project memory yet. Limits: 40 items / 15k characters.
                 </div>
               ) : (
-                memories.slice(0, 8).map((memory) => (
+                memories.map((memory) => (
                   <div className="rail-list-item" key={memory.id}>
                     <div>
                       <small>
@@ -888,7 +897,7 @@ export function ProjectWorkspace({
                   Use the paperclip to upload private project files, up to 20 MB each.
                 </div>
               ) : (
-                projectFiles.slice(0, 12).map((file) => (
+                projectFiles.map((file) => (
                   <div className="rail-list-item file-row" key={file.id}>
                     <div>
                       <p>{file.name}</p>
@@ -913,8 +922,9 @@ export function ProjectWorkspace({
               )}
             </div>
             <p className="rail-footnote">
-              Private text, Markdown, CSV and JSON files can be read by the Capability
-              Broker when you ask for them. Other file types remain metadata-only.
+              Upload up to 8 private files at a time, up to 20 MB each. Zeus and
+              Olympus can read text, Markdown, CSV and JSON files up to 1 MB;
+              other formats are stored for download only.
             </p>
           </section>
 
@@ -933,7 +943,7 @@ export function ProjectWorkspace({
                   explicit deliverable inside this Project.
                 </div>
               ) : (
-                artifacts.slice(0, 10).map((artifact) => (
+                artifacts.map((artifact) => (
                   <div className="rail-list-item file-row" key={artifact.id}>
                     <div>
                       <p>{artifact.title}</p>

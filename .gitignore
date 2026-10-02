@@ -7,3 +7,7 @@ dist
 .vercel
 coverage
 *.log
+*.tsbuildinfo
+mobile/.expo
+mobile/ios
+mobile/android

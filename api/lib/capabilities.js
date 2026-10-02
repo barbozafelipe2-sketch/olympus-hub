@@ -538,15 +538,43 @@ export async function readRequestedProjectFiles({
   messages
 }) {
   const userText = latestUser(messages);
-  const candidates = requestedFiles(userText, files)
-    .filter(
-      (file) =>
-        READABLE_MIME_TYPES.has(file.mime_type) &&
-        file.size_bytes <= MAX_FILE_BYTES_FOR_PROMPT
+  const requested = requestedFiles(userText, files);
+  const candidates = requested
+    .filter((file) =>
+      READABLE_MIME_TYPES.has(file.mime_type) &&
+      file.size_bytes <= MAX_FILE_BYTES_FOR_PROMPT
     )
     .slice(0, MAX_FILES_PER_REQUEST);
+  const selected = new Set(candidates.map((file) => file.id));
+  const skipped = requested.filter((file) => !selected.has(file.id));
+
+  function skippedReason(file) {
+    if (!READABLE_MIME_TYPES.has(file.mime_type)) {
+      return "This file type can be stored and downloaded, but its contents are not readable by OlyHub yet.";
+    }
+    if (file.size_bytes > MAX_FILE_BYTES_FOR_PROMPT) {
+      return "This file is larger than the 1 MB per-file analysis limit.";
+    }
+    return "OlyHub can read at most 3 files in one request.";
+  }
 
   if (candidates.length === 0) {
+    if (skipped.length > 0) {
+      const skippedFiles = skipped.map((file) => file.name).join(", ");
+      return {
+        context:
+          "\n\nThe user asked OlyHub to analyze Project files, but their contents could not be read: " +
+          skippedFiles +
+          ". Explain this limitation clearly, do not infer or summarize unseen contents, and ask the user to upload text/plain, text/markdown, text/csv or application/json files under 1 MB.",
+        traces: skipped.map((file) => ({
+          name: "read_project_file",
+          status: "failed",
+          target: file.name,
+          reason: skippedReason(file)
+        }))
+      };
+    }
+
     return {
       context: "",
       traces: []
@@ -556,6 +584,16 @@ export async function readRequestedProjectFiles({
   let totalChars = 0;
   const blocks = [];
   const traces = [];
+  const failedDownloads = [];
+
+  for (const file of skipped) {
+    traces.push({
+      name: "read_project_file",
+      status: "failed",
+      target: file.name,
+      reason: skippedReason(file)
+    });
+  }
 
   for (const file of candidates) {
     try {
@@ -581,6 +619,7 @@ export async function readRequestedProjectFiles({
         bytes: file.size_bytes
       });
     } catch (error) {
+      failedDownloads.push(file.name);
       traces.push({
         name: "read_project_file",
         status: "failed",
@@ -594,8 +633,22 @@ export async function readRequestedProjectFiles({
     context:
       blocks.length > 0
         ? "\n\nVerified project file content supplied by OlyHub Capability Broker:" +
-          blocks.join("")
-        : "",
+          blocks.join("") +
+          (skipped.length > 0
+            ? "\n\nSome requested files were not analyzed: " +
+              skipped.map((file) => file.name + " (" + skippedReason(file) + ")").join("; ") +
+              ". State which files were skipped; do not imply they were read."
+            : "") +
+          (failedDownloads.length > 0
+            ? "\n\nOlyHub could not load these requested files: " +
+              failedDownloads.join(", ") +
+              ". Tell the user the file content was unavailable and do not infer its contents."
+            : "")
+        : failedDownloads.length > 0
+          ? "\n\nThe user asked OlyHub to analyze Project files, but their content could not be loaded: " +
+            failedDownloads.join(", ") +
+            ". Explain that the file could not be read, do not infer or summarize its unseen contents, and ask the user to retry the upload."
+          : "",
     traces
   };
 }

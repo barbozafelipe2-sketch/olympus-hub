@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 - Native iOS foundation
+
+### Added
+- Real React Native iOS app under `mobile/` using Expo SDK 57 and React Native 0.86; it is not a WebView wrapper.
+- Native authentication, durable chat with five modes, Project workspace, task management, approved memory, private Project file uploads, artifact sharing and account deletion.
+- Persistent Supabase auth session on device and Zod validation of native chat API responses.
+- EAS development/preview/production build profiles and a separate native setup/release guide.
+- CI gates for native TypeScript checking and iOS bundle export.
+
+### Release status
+- Expo SDK compatibility and Expo Doctor checks pass; signed-device QA, Apple identity, final bundle-ID registration, legal/privacy setup, business model/IAP and store metadata remain open.
+
+## 0.5.1 - Continuity and capability hardening
+
+### Fixed
+- Project history checkpoints now append only uncovered message ranges, catch up in bounded batches, and preserve prior checkpoint content.
+- A single available provider now causes Olympus to degrade to a truthful Zeus route instead of repeating that provider as multiple specialists.
+- Long Project rails and Home history show all rows fetched for those views rather than silently hiding older items behind display slices.
+- Home history now loads older conversations in pages instead of stopping at the initial recent-chat limit.
+- Archived Projects can now be listed and restored instead of disappearing from the workspace picker.
+- Blob downloads now keep object URLs alive briefly after triggering browser downloads.
+- Chat composers avoid submitting while an input method editor is composing text.
+
+### Validation
+- Added regression coverage for checkpoint continuity, bounded catch-up, checkpoint trimming disclosure and single-provider Olympus behavior.
+
 ## 0.5.0 - Commercial workspace and orchestration
 
 ### Added
@@ -19,6 +45,7 @@
 - Complete account deletion with private Storage cleanup.
 - Configuration-only health endpoint.
 - PWA manifest, production service worker and install metadata.
+- iOS home-screen 180px Apple touch icon and 192/512px PNG PWA install icons, precached by the service worker.
 - Capability Broker text/Markdown/CSV/JSON Project file reading.
 - Live web research capability using hosted OpenAI web search.
 - Persistent clickable web-source citations in Home and Projects.
@@ -33,6 +60,7 @@
 - Health reporting distinguishes configured services from live provider health.
 
 ### Security
+- Account deletion recursively removes owned objects from both `project-files` and `artifact-files`, including orphaned uploads.
 - Account deletion admin credential remains server-only.
 - Service worker refuses to cache authenticated API responses.
 - Quotas are checked before provider spend.

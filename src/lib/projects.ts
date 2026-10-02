@@ -4,11 +4,13 @@ import { requireSupabase } from "./supabase";
 export type ProjectRow =
   Database["public"]["Tables"]["projects"]["Row"];
 
-export async function listProjects(): Promise<ProjectRow[]> {
+export async function listProjects(
+  status: "active" | "archived" = "active"
+): Promise<ProjectRow[]> {
   const { data, error } = await requireSupabase()
     .from("projects")
     .select("*")
-    .eq("status", "active")
+    .eq("status", status)
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -34,10 +36,13 @@ export async function createProject(input: {
   return data;
 }
 
-export async function archiveProject(projectId: string): Promise<void> {
+export async function setProjectStatus(
+  projectId: string,
+  status: "active" | "archived"
+): Promise<void> {
   const { error } = await requireSupabase()
     .from("projects")
-    .update({ status: "archived" })
+    .update({ status })
     .eq("id", projectId);
 
   if (error) throw error;
