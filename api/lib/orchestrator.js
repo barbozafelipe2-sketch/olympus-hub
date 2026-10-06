@@ -5,12 +5,6 @@ import {
 } from "./providers.js";
 
 const MODE_SYSTEM = {
-  openai:
-    "You are the direct OpenAI route inside OlyHub. Answer the user directly and accurately.",
-  claude:
-    "You are the direct Claude route inside OlyHub. Answer the user directly and accurately.",
-  google:
-    "You are the direct Google AI route inside OlyHub. Answer the user directly and accurately.",
   zeus:
     "You are Zeus, OlyHub's daily orchestration layer. Produce one decisive, useful answer. Never invent tool use, provider use, or file access.",
   olympus:
@@ -58,26 +52,34 @@ function aggregateUsage(trace) {
   );
 }
 
-async function withOpenAIFallback(provider, args, role) {
-  try {
-    const result = await callProvider(provider, args);
-    return {
-      result,
-      trace: [traceEntry(result, role)],
-      fallbackUsed: false
-    };
-  } catch (primaryError) {
-    if (provider === "openai" || !providerAvailable("openai")) {
-      throw primaryError;
-    }
+async function withProviderFallback(provider, args, role, { excludeProviders = [] } = {}) {
+  const excluded = new Set(excludeProviders);
+  const candidates = [
+    provider,
+    ...configuredProviders().filter(
+      (candidate) => candidate !== provider && !excluded.has(candidate)
+    )
+  ].filter((candidate, index, list) => list.indexOf(candidate) === index);
+  const failed = [];
 
-    const fallback = await callProvider("openai", args);
-    return {
-      result: fallback,
-      trace: [traceEntry(fallback, role, provider)],
-      fallbackUsed: true
-    };
+  for (const candidate of candidates) {
+    try {
+      const result = await callProvider(candidate, args);
+      return {
+        result,
+        trace: [traceEntry(result, role, failed.length ? failed.join(" -> ") : null)],
+        fallbackUsed: failed.length > 0,
+        attemptedProviders: [...failed, candidate]
+      };
+    } catch {
+      failed.push(candidate);
+    }
   }
+
+  throw Object.assign(
+    new Error("No configured AI provider completed successfully."),
+    { attemptedProviders: failed }
+  );
 }
 
 function chooseZeusProvider(messages) {
@@ -137,41 +139,9 @@ function pickSpecialistProviders(count) {
   return preferred.slice(0, count);
 }
 
-async function executeDirect(mode, systemContext, messages) {
-  const requested =
-    mode === "claude" ? "anthropic" : mode === "google" ? "google" : "openai";
-
-  const call = await withOpenAIFallback(
-    requested,
-    {
-      system: MODE_SYSTEM[mode] + systemContext,
-      messages,
-      maxOutputTokens: 4096,
-      timeoutMs: 30_000
-    },
-    "direct"
-  );
-
-  return {
-    reply: call.result.text,
-    provider: call.result.provider,
-    model: call.result.model,
-    requestId: call.result.requestId,
-    fallbackUsed: call.fallbackUsed,
-    trace: call.trace,
-    usage: aggregateUsage(call.trace),
-    orchestration: {
-      mode,
-      calls: call.trace.length,
-      multiProvider: false,
-      degraded: call.fallbackUsed
-    }
-  };
-}
-
 async function executeZeus(systemContext, messages) {
   const leadProvider = chooseZeusProvider(messages);
-  const leadCall = await withOpenAIFallback(
+  const leadCall = await withProviderFallback(
     leadProvider,
     {
       system: MODE_SYSTEM.zeus + systemContext,
@@ -207,47 +177,60 @@ async function executeZeus(systemContext, messages) {
   }
 
   try {
-    const critique = await callProvider(reviewer, {
-      system:
-        "You are the single Zeus reviewer. You see only the user's latest request and the lead candidate. Identify material factual, logical, security, UX, cost, or requirement failures. Be concise; do not rewrite the whole answer.",
-      messages: [
-        {
-          role: "user",
-          content:
-            "USER REQUEST:\n" +
-            lastUser(messages) +
-            "\n\nLEAD CANDIDATE:\n" +
-            leadCall.result.text
-        }
-      ],
-      maxOutputTokens: 1400,
-      timeoutMs: 20_000
-    });
-    trace.push(traceEntry(critique, "reviewer"));
+    const critiqueCall = await withProviderFallback(
+      reviewer,
+      {
+        system:
+          "You are the single Zeus reviewer. You see only the user's latest request and the lead candidate. Identify material factual, logical, security, UX, cost, or requirement failures. Be concise; do not rewrite the whole answer.",
+        messages: [
+          {
+            role: "user",
+            content:
+              "USER REQUEST:\n" +
+              lastUser(messages) +
+              "\n\nLEAD CANDIDATE:\n" +
+              leadCall.result.text
+          }
+        ],
+        maxOutputTokens: 1400,
+        timeoutMs: 20_000
+      },
+      "reviewer",
+      { excludeProviders: [leadCall.result.providerId] }
+    );
+    const critique = critiqueCall.result;
+    trace.push(...critiqueCall.trace);
+    fallbackUsed ||= critiqueCall.fallbackUsed;
 
     const integrationProvider = providerAvailable("openai")
       ? "openai"
       : leadCall.result.providerId;
 
-    const integrated = await callProvider(integrationProvider, {
-      system:
-        "You are Zeus Director. Return one final answer. Preserve the lead's useful work, fix only valid reviewer findings, and never mention this internal review unless the user asks.",
-      messages: [
-        {
-          role: "user",
-          content:
-            "USER REQUEST:\n" +
-            lastUser(messages) +
-            "\n\nLEAD:\n" +
-            leadCall.result.text +
-            "\n\nREVIEW:\n" +
-            critique.text
-        }
-      ],
-      maxOutputTokens: 4096,
-      timeoutMs: 25_000
-    });
-    trace.push(traceEntry(integrated, "director"));
+    const integrationCall = await withProviderFallback(
+      integrationProvider,
+      {
+        system:
+          "You are Zeus Director. Return one final answer. Preserve the lead's useful work, fix only valid reviewer findings, and never mention this internal review unless the user asks.",
+        messages: [
+          {
+            role: "user",
+            content:
+              "USER REQUEST:\n" +
+              lastUser(messages) +
+              "\n\nLEAD:\n" +
+              leadCall.result.text +
+              "\n\nREVIEW:\n" +
+              critique.text
+          }
+        ],
+        maxOutputTokens: 4096,
+        timeoutMs: 25_000
+      },
+      "director"
+    );
+    const integrated = integrationCall.result;
+    trace.push(...integrationCall.trace);
+    fallbackUsed ||= integrationCall.fallbackUsed;
 
     return {
       reply: integrated.text,
@@ -306,33 +289,42 @@ async function executeOlympus(systemContext, messages) {
   ];
 
   const settled = await Promise.allSettled(
-    providers.map((provider, index) =>
-      withOpenAIFallback(
-        provider,
-        {
-          system: MODE_SYSTEM.olympus + systemContext + "\n\n" + roles[index],
-          messages,
-          maxOutputTokens: 3200,
-          timeoutMs: 27_000
-        },
-        "specialist-" + (index + 1)
-      )
-    )
+    providers.map(async (provider, index) => {
+      const result = await callProvider(provider, {
+        system: MODE_SYSTEM.olympus + systemContext + "\n\n" + roles[index],
+        messages,
+        maxOutputTokens: 3200,
+        timeoutMs: 27_000
+      });
+      return {
+        result,
+        trace: [traceEntry(result, "specialist-" + (index + 1))],
+        fallbackUsed: false
+      };
+    })
   );
 
   const successful = settled
     .filter((item) => item.status === "fulfilled")
     .map((item) => item.value);
 
-  if (successful.length === 0) {
-    throw new Error("No Olympus specialist completed successfully.");
-  }
-
   const trace = successful.flatMap((item) => item.trace);
   let fallbackUsed = successful.some((item) => item.fallbackUsed);
   const specialistProviderCount = new Set(
     successful.map((item) => item.result.providerId)
   ).size;
+
+  if (specialistProviderCount < 2) {
+    const singleRoute = await executeZeus(systemContext, messages);
+    return {
+      ...singleRoute,
+      orchestration: {
+        ...singleRoute.orchestration,
+        mode: "olympus",
+        degraded: true
+      }
+    };
+  }
   const candidateText = successful
     .map(
       (item, index) =>
@@ -346,24 +338,29 @@ async function executeOlympus(systemContext, messages) {
     (providerAvailable("openai") ? "openai" : successful[0].result.providerId);
 
   try {
-    const critic = await callProvider(criticProvider, {
-      system:
-        "You are the one focused Olympus critic. Compare the specialist outputs against the user's request. Identify disagreements, missing requirements, factual risks, and the strongest pieces to preserve. Do not produce the final answer.",
-      messages: [
-        {
-          role: "user",
-          content:
-            "USER REQUEST:\n" +
-            lastUser(messages) +
-            "\n\nCANDIDATES:\n" +
-            candidateText
-        }
-      ],
-      maxOutputTokens: 1800,
-      timeoutMs: 20_000
-    });
-    critiqueText = critic.text;
-    trace.push(traceEntry(critic, "critic"));
+    const criticCall = await withProviderFallback(
+      criticProvider,
+      {
+        system:
+          "You are the one focused Olympus critic. Compare the specialist outputs against the user's request. Identify disagreements, missing requirements, factual risks, and the strongest pieces to preserve. Do not produce the final answer.",
+        messages: [
+          {
+            role: "user",
+            content:
+              "USER REQUEST:\n" +
+              lastUser(messages) +
+              "\n\nCANDIDATES:\n" +
+              candidateText
+          }
+        ],
+        maxOutputTokens: 1800,
+        timeoutMs: 20_000
+      },
+      "critic"
+    );
+    critiqueText = criticCall.result.text;
+    trace.push(...criticCall.trace);
+    fallbackUsed ||= criticCall.fallbackUsed;
   } catch {
     critiqueText = "Critic unavailable. Director must reconcile candidates directly.";
   }
@@ -372,25 +369,51 @@ async function executeOlympus(systemContext, messages) {
     ? "openai"
     : successful[0].result.providerId;
 
-  const director = await callProvider(directorProvider, {
-    system:
-      "You are Olympus Director. Integrate the specialist work into one coherent final answer. Resolve disagreements using evidence and requirements, remove repetition, and never expose hidden chain-of-thought. You may say the answer was synthesized by Olympus, but only describe providers that appear in the supplied trace.",
-    messages: [
+  let directorCall;
+  try {
+    directorCall = await withProviderFallback(
+      directorProvider,
       {
-        role: "user",
-        content:
-          "USER REQUEST:\n" +
-          lastUser(messages) +
-          "\n\nSPECIALIST OUTPUTS:\n" +
-          candidateText +
-          "\n\nCRITIC:\n" +
-          critiqueText
+        system:
+          "You are Olympus Director. Integrate the specialist work into one coherent final answer. Resolve disagreements using evidence and requirements, remove repetition, and never expose hidden chain-of-thought. You may say the answer was synthesized by Olympus, but only describe providers that appear in the supplied trace.",
+        messages: [
+          {
+            role: "user",
+            content:
+              "USER REQUEST:\n" +
+              lastUser(messages) +
+              "\n\nSPECIALIST OUTPUTS:\n" +
+              candidateText +
+              "\n\nCRITIC:\n" +
+              critiqueText
+          }
+        ],
+        maxOutputTokens: 5200,
+        timeoutMs: 28_000
+      },
+      "director"
+    );
+  } catch {
+    const best = successful[0];
+    return {
+      reply: best.result.text,
+      provider: best.result.provider,
+      model: best.result.model,
+      requestId: best.result.requestId,
+      fallbackUsed,
+      trace,
+      usage: aggregateUsage(trace),
+      orchestration: {
+        mode: "olympus",
+        calls: trace.length,
+        multiProvider: specialistProviderCount > 1,
+        degraded: true
       }
-    ],
-    maxOutputTokens: 5200,
-    timeoutMs: 28_000
-  });
-  trace.push(traceEntry(director, "director"));
+    };
+  }
+  const director = directorCall.result;
+  trace.push(...directorCall.trace);
+  fallbackUsed ||= directorCall.fallbackUsed;
 
   return {
     reply: director.text,
@@ -421,5 +444,5 @@ export async function executeMode({ mode, systemContext, messages }) {
     return executeOlympus(systemContext, messages);
   }
 
-  return executeDirect(mode, systemContext, messages);
+  throw new Error("Unsupported OlyHub mode.");
 }

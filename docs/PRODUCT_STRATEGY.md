@@ -21,7 +21,7 @@ Zeus is the product's default interface.
 
 It should feel fast enough for ordinary questions and smart enough to route harder work without the user managing providers.
 
-Target: one strong lead route, OpenAI fallback, and a reviewer only when the expected value of review justifies the extra latency/cost.
+Target: one strong lead route with failover across the other configured providers, plus a reviewer only when expected value justifies the extra latency/cost.
 
 ### Olympus — deliberate mode
 Olympus exists for work where independent perspectives materially improve the result: architecture, consequential decisions, audits, research synthesis and complex plans.

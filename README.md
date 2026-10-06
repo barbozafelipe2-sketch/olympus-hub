@@ -24,8 +24,8 @@ The target experience is: **“my work is already here and OlyHub already knows 
 - Live web research through the OpenAI Responses `web_search` tool when current/search intent is detected.
 - Persistent clickable web-source citations restored with conversation history.
 - Versioned artifacts in Home and Projects with download/delete and immutable revisions.
-- Direct OpenAI, Anthropic and Google AI provider adapters.
-- Zeus routing with OpenAI fallback and conditional reviewer/director flow.
+- Server-side OpenAI, Anthropic and Google AI provider adapters.
+- Zeus routing across configured providers with bounded mutual failover and conditional reviewer/director flow.
 - Olympus multi-call specialist + critic + Director flow.
 - Durable execution traces with exact provider/model/request routing.
 - Provider-reported token usage aggregated across every orchestration call.
@@ -54,10 +54,10 @@ Home supports persistent conversations and versioned artifacts. Persistent file 
 
 ## Provider behavior
 
-OpenAI is the required fallback provider.
+Providers form a mutual fallback pool: Zeus tries its selected healthy provider first, then each other configured healthy provider once. OpenAI is the first alternate when it was not the failed provider, and its key enables hosted web search.
 
 - The product exposes only Zeus and Olympus in web and native interfaces; users do not choose a provider directly.
-- Provider adapters remain internal routing capabilities. Zeus chooses a route and may add one reviewer for higher-value review cases, with OpenAI as the required fallback.
+- Provider adapters remain internal routing capabilities. Zeus chooses a route and may add one reviewer for higher-value review cases. If a provider fails, the server tries each remaining configured, healthy provider at most once for that stage; failed Olympus specialists trigger honest degradation rather than duplicate-provider council calls.
 - Olympus uses distinct specialist providers when available; with fewer than two it returns a Zeus answer marked degraded instead of simulating a council with duplicate calls to one provider.
 
 The UI trace describes what actually ran. Configured credentials are not described as live provider health.

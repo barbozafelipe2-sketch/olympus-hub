@@ -161,7 +161,7 @@ Explicit create intents can persist the completed model result as an artifact. E
 ## Provider adapters
 
 ### OpenAI
-Responses API; required commercial fallback.
+Responses API for hosted web search and one participant in the mutual provider failover pool.
 
 ### Anthropic
 Messages API.
@@ -177,7 +177,7 @@ Zeus is the default daily orchestration layer.
 
 1. Inspect request shape.
 2. Choose a configured route.
-3. Use OpenAI fallback when another route fails/unavailable.
+3. On provider failure, try remaining configured healthy providers once; OpenAI is preferred among alternates when available.
 4. For review-worthy work, allow one focused reviewer.
 5. Integrate with a Director call.
 6. Return one result plus execution trace.

@@ -5,7 +5,7 @@ import { requireSupabase } from "./supabase";
 const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
 
 export const modes: Array<{ id: ModeId; label: string; detail: string }> = [
-  { id: "zeus", label: "Zeus", detail: "Smart routing with OpenAI fallback" },
+  { id: "zeus", label: "Zeus", detail: "Smart routing with provider failover" },
   { id: "olympus", label: "Olympus", detail: "Multi-model council" },
 ];
 

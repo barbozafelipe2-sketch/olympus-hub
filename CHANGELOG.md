@@ -5,8 +5,12 @@
 ### Changed
 - The web and native clients expose only Zeus and Olympus; direct provider choices are removed from the chat mode selectors.
 - The chat API rejects direct provider modes so clients use the intended orchestration entry points.
-- OpenAI, Anthropic and Google adapters remain available to server-side routing; OpenAI remains the required fallback.
+- OpenAI, Anthropic and Google adapters remain internal; each configured healthy provider can fail over to the others, with OpenAI first among alternates when it was not the failed provider.
 - Existing conversations saved with a legacy direct-provider mode reopen in Zeus.
+- Removed the now-unreachable direct-provider orchestration branch while preserving internal provider adapters.
+- Aligned web, mobile package, lockfile and native app versions to 0.6.1.
+- Added bounded provider failover and trace disclosure for provider failures before a successful route.
+- Olympus specialists remain on distinct provider calls; fewer than two successful distinct specialists degrades to Zeus.
 
 ### Validation
 - CI must pass web tests, typecheck, build, smoke checks and native typecheck/export before this phase is considered complete.

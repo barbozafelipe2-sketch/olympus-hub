@@ -226,7 +226,7 @@ export function SettingsView({ email }: Props) {
                     </div>
                     <span className="execution-provider">
                       {execution.provider} / {execution.model}
-                      {execution.fallback_used ? " · OpenAI fallback used" : ""}
+                      {execution.fallback_used ? " · provider fallback used" : ""}
                     </span>
                     <span className="execution-meta">
                       {executionTime(execution.created_at)} · {execution.call_count}{" "}
