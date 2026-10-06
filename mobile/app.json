@@ -80,6 +80,11 @@
             ]
           }
         ]
+      },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "OlyHub uses the microphone only when you choose to speak to Zeus or Olympus.",
+        "NSPhotoLibraryUsageDescription": "OlyHub accesses your photo library only when you choose an image or video to add to a conversation or Project.",
+        "NSCameraUsageDescription": "OlyHub uses the camera only when you choose to capture an image for a conversation or Project."
       }
     },
     "android": {
