@@ -101,8 +101,11 @@ const orchestrator = readFileSync(resolve("api/lib/orchestrator.js"), "utf8");
 assert(
   orchestrator.includes("executeZeus") &&
     orchestrator.includes("executeOlympus") &&
-    orchestrator.includes("withOpenAIFallback"),
-  "Zeus/Olympus orchestration is not wired"
+    orchestrator.includes("withProviderFallback") &&
+    orchestrator.includes("Unsupported OlyHub mode.") &&
+    !orchestrator.includes("executeDirect") &&
+    chatApi.includes('z.enum(["zeus", "olympus"])'),
+  "Zeus/Olympus orchestration and provider failover boundary are not wired"
 );
 
 
