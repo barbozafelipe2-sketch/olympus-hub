@@ -35,7 +35,7 @@ The target experience is: **“my work is already here and OlyHub already knows 
 - Persistent onboarding.
 - Honest configuration health endpoint at `/api/health`.
 - Installable PWA foundation with API responses excluded from service-worker caching.
-- Native iOS client under `mobile/`, built with Expo SDK 57 / React Native 0.86 (not a WebView wrapper): auth, persistent chats, five modes, Projects, tasks, approved memory, private file uploads, artifact sharing and account deletion.
+- Native iOS client under `mobile/`, built with Expo SDK 57 / React Native 0.86 (not a WebView wrapper): auth, persistent chats, Zeus and Olympus modes, Projects, tasks, approved memory, private file uploads, artifact sharing and account deletion.
 - Locked npm dependencies and main-only CI:
   `npm ci -> typecheck -> build -> smoke`.
 
@@ -56,10 +56,8 @@ Home supports persistent conversations and versioned artifacts. Persistent file 
 
 OpenAI is the required fallback provider.
 
-- Direct OpenAI -> OpenAI.
-- Direct Claude -> Anthropic when available, otherwise OpenAI fallback.
-- Direct Google AI -> Google when available, otherwise OpenAI fallback.
-- Zeus chooses a route and may add one reviewer for higher-value review cases.
+- The product exposes only Zeus and Olympus in web and native interfaces; users do not choose a provider directly.
+- Provider adapters remain internal routing capabilities. Zeus chooses a route and may add one reviewer for higher-value review cases, with OpenAI as the required fallback.
 - Olympus uses distinct specialist providers when available; with fewer than two it returns a Zeus answer marked degraded instead of simulating a council with duplicate calls to one provider.
 
 The UI trace describes what actually ran. Configured credentials are not described as live provider health.

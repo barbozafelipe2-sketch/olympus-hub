@@ -23,7 +23,7 @@ This file is a release checklist. The repository now includes a real React Nativ
 
 Implemented in `mobile/`:
 - Expo SDK 57 / React Native 0.86 app, native screens, Expo Router navigation and EAS build profiles.
-- Native sign-in/account creation, persistent Supabase session, Home chat, all five provider modes, durable Projects, task/memory/file/artifact surfaces, Settings and account deletion.
+- Native sign-in/account creation, persistent Supabase session, Home chat with Zeus and Olympus modes, durable Projects, task/memory/file/artifact surfaces, Settings and account deletion.
 - Shared commercial Supabase project and authenticated server API; no provider credentials are shipped in the client.
 
 Still required:

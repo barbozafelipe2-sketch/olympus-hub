@@ -7,9 +7,6 @@ const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
 export const modes: Array<{ id: ModeId; label: string; detail: string }> = [
   { id: "zeus", label: "Zeus", detail: "Smart routing with OpenAI fallback" },
   { id: "olympus", label: "Olympus", detail: "Multi-model council" },
-  { id: "openai", label: "OpenAI", detail: "Direct OpenAI route" },
-  { id: "claude", label: "Claude", detail: "Claude with OpenAI fallback" },
-  { id: "google", label: "Google AI", detail: "Google with OpenAI fallback" },
 ];
 
 const chatResponseSchema = z.object({
@@ -21,7 +18,7 @@ const chatResponseSchema = z.object({
   executionId: z.string().nullable(),
   trace: z.array(z.unknown()),
   orchestration: z.object({
-    mode: z.enum(["zeus", "olympus", "openai", "claude", "google"]),
+    mode: z.enum(["zeus", "olympus"]),
     calls: z.number(),
     multiProvider: z.boolean(),
     degraded: z.boolean(),

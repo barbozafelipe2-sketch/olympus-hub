@@ -14,7 +14,7 @@ import {
   PROJECT_RECENT_MESSAGES
 } from "./lib/checkpoints.js";
 
-const ModeSchema = z.enum(["zeus", "olympus", "openai", "claude", "google"]);
+const ModeSchema = z.enum(["zeus", "olympus"]);
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),

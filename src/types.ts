@@ -1,6 +1,6 @@
 export type Role = "user" | "assistant";
 
-export type ModeId = "zeus" | "olympus" | "openai" | "claude" | "google";
+export type ModeId = "zeus" | "olympus";
 
 export type ApiSource = {
   title: string;
@@ -123,20 +123,5 @@ export const MODES: Array<{
     id: "olympus",
     label: "Olympus",
     description: "Council workflow; degrades transparently when adapters are unavailable"
-  },
-  {
-    id: "openai",
-    label: "OpenAI",
-    description: "Direct OpenAI route"
-  },
-  {
-    id: "claude",
-    label: "Claude",
-    description: "Direct Claude route with OpenAI fallback"
-  },
-  {
-    id: "google",
-    label: "Google AI",
-    description: "Direct Google AI route with OpenAI fallback"
   }
 ];

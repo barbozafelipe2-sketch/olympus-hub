@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 - Two-mode product boundary
+
+### Changed
+- The web and native clients expose only Zeus and Olympus; direct provider choices are removed from the chat mode selectors.
+- The chat API rejects direct provider modes so clients use the intended orchestration entry points.
+- OpenAI, Anthropic and Google adapters remain available to server-side routing; OpenAI remains the required fallback.
+- Existing conversations saved with a legacy direct-provider mode reopen in Zeus.
+
+### Validation
+- CI must pass web tests, typecheck, build, smoke checks and native typecheck/export before this phase is considered complete.
+
 ## 0.6.0 - Native iOS foundation
 
 ### Added

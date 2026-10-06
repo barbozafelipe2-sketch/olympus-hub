@@ -6,7 +6,7 @@ This is the native OlyHub application built with Expo SDK 57 and React Native 0.
 
 - Native email sign-in and account creation with persistent Supabase sessions.
 - Home conversations persisted in the shared commercial database.
-- Zeus, Olympus, OpenAI, Claude and Google AI modes through the existing server API; OpenAI remains server-side fallback.
+- Zeus and Olympus modes through the existing server API. Provider selection stays in server-side routing, with OpenAI as the required fallback.
 - Projects with a dedicated durable conversation, tasks, approved memory, private file upload, and artifact listing/sharing.
 - Settings with sign-out and the existing server-side account deletion flow.
 - Native navigation, keyboard handling, document picker, share sheet, secure per-user data boundaries through RLS.
