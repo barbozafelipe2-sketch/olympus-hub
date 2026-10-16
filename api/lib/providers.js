@@ -1,3 +1,4 @@
+import { compactInput, MAX_OUTPUT_TOKENS } from "./budget.js";
 const HEALTH_WINDOW_MS = 60_000;
 const FAILURE_THRESHOLD = 2;
 const health = new Map();
@@ -41,20 +42,22 @@ function markFailure(provider) {
   });
 }
 
-function modelFor(provider) {
+export function modelFor(provider, tier = "economy") {
+  const configured = process.env[`${provider.toUpperCase()}_${tier.toUpperCase()}_MODEL`];
+  if (configured) return configured;
   if (provider === "openai") {
     return (
       process.env.OPENAI_DEFAULT_MODEL ||
       process.env.OPENAI_FALLBACK_MODEL ||
-      "gpt-5.6-luna"
+      (tier === "premium" ? "gpt-5-mini" : "gpt-4.1-mini")
     );
   }
 
   if (provider === "anthropic") {
-    return process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+    return process.env.ANTHROPIC_MODEL || (tier === "premium" ? "claude-sonnet-4-5" : "claude-haiku-4-5");
   }
 
-  return process.env.GOOGLE_AI_MODEL || "gemini-3.8-flash";
+  return process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
 }
 
 function requestId(response, fallback) {
@@ -66,14 +69,14 @@ function requestId(response, fallback) {
   );
 }
 
-async function fetchJson(url, init, timeoutMs) {
+async function fetchJson(url, init, timeoutMs, signal) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
       ...init,
-      signal: controller.signal
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
     });
     const data = await response.json().catch(() => null);
     return { response, data };
@@ -118,6 +121,7 @@ function openAIUsage(data) {
   const outputTokens = numberOrZero(usage.output_tokens);
 
   return {
+    reported: data?.usage != null && (data.usage.input_tokens != null || data.usage.total_input_tokens != null),
     inputTokens,
     outputTokens,
     cachedInputTokens: numberOrZero(usage.input_tokens_details?.cached_tokens),
@@ -138,6 +142,7 @@ function anthropicUsage(data) {
   const cacheWriteTokens = numberOrZero(usage.cache_creation_input_tokens);
 
   return {
+    reported: data?.usage != null && (data.usage.input_tokens != null || data.usage.total_input_tokens != null),
     inputTokens,
     outputTokens,
     cachedInputTokens,
@@ -157,6 +162,7 @@ function googleUsage(data) {
   const toolTokens = numberOrZero(usage.total_tool_use_tokens);
 
   return {
+    reported: data?.usage != null && (data.usage.input_tokens != null || data.usage.total_input_tokens != null),
     inputTokens,
     outputTokens,
     cachedInputTokens: numberOrZero(usage.total_cached_tokens),
@@ -179,8 +185,7 @@ function googleText(data) {
     .trim();
 }
 
-async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs }) {
-  const model = modelFor("openai");
+async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs, model, signal }) {
   const { response, data } = await fetchJson(
     "https://api.openai.com/v1/responses",
     {
@@ -199,7 +204,7 @@ async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs }) {
         max_output_tokens: maxOutputTokens
       })
     },
-    timeoutMs
+    timeoutMs, signal
   );
 
   const id = requestId(response, data?.id);
@@ -207,12 +212,12 @@ async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs }) {
     throw Object.assign(new Error("OpenAI request failed."), {
       provider: "openai",
       status: response.status,
-      requestId: id
+      requestId: id, model, usage: null
     });
   }
 
   const text = openAIText(data);
-  if (!text) throw new Error("OpenAI returned an empty response.");
+  if (!text) throw Object.assign(new Error("OpenAI returned an empty response."), { provider: "openai", model, requestId: id, usage: openAIUsage(data) });
 
   return {
     text,
@@ -224,8 +229,7 @@ async function callOpenAI({ system, messages, maxOutputTokens, timeoutMs }) {
   };
 }
 
-async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
-  const model = modelFor("anthropic");
+async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs, model, signal }) {
   const { response, data } = await fetchJson(
     "https://api.anthropic.com/v1/messages",
     {
@@ -245,7 +249,7 @@ async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
         }))
       })
     },
-    timeoutMs
+    timeoutMs, signal
   );
 
   const id = requestId(response, data?.id);
@@ -253,12 +257,12 @@ async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
     throw Object.assign(new Error("Anthropic request failed."), {
       provider: "anthropic",
       status: response.status,
-      requestId: id
+      requestId: id, model, usage: null
     });
   }
 
   const text = anthropicText(data);
-  if (!text) throw new Error("Anthropic returned an empty response.");
+  if (!text) throw Object.assign(new Error("Anthropic returned an empty response."), { provider: "anthropic", model, requestId: id, usage: anthropicUsage(data) });
 
   return {
     text,
@@ -270,8 +274,7 @@ async function callAnthropic({ system, messages, maxOutputTokens, timeoutMs }) {
   };
 }
 
-async function callGoogle({ system, messages, maxOutputTokens, timeoutMs }) {
-  const model = modelFor("google");
+async function callGoogle({ system, messages, maxOutputTokens, timeoutMs, model, signal }) {
   const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
   const input =
     "SYSTEM GUIDANCE:\n" +
@@ -296,7 +299,7 @@ async function callGoogle({ system, messages, maxOutputTokens, timeoutMs }) {
         }
       })
     },
-    timeoutMs
+    timeoutMs, signal
   );
 
   const id = requestId(response, data?.id);
@@ -304,12 +307,12 @@ async function callGoogle({ system, messages, maxOutputTokens, timeoutMs }) {
     throw Object.assign(new Error("Google AI request failed."), {
       provider: "google",
       status: response.status,
-      requestId: id
+      requestId: id, model, usage: null
     });
   }
 
   const text = googleText(data);
-  if (!text) throw new Error("Google AI returned an empty response.");
+  if (!text) throw Object.assign(new Error("Google AI returned an empty response."), { provider: "google", model, requestId: id, usage: googleUsage(data) });
 
   return {
     text,
@@ -327,7 +330,10 @@ export async function callProvider(
     system,
     messages,
     maxOutputTokens = 4096,
-    timeoutMs = 28_000
+    timeoutMs = 28_000,
+    tier = "economy",
+    budget = null,
+    role = "model"
   }
 ) {
   if (!providerAvailable(provider)) {
@@ -337,27 +343,38 @@ export async function callProvider(
     });
   }
 
+  const input = compactInput(system, messages);
+  system = input.system; messages = input.messages;
+  maxOutputTokens = Math.min(MAX_OUTPUT_TOKENS, maxOutputTokens);
+  const model = modelFor(provider, tier);
+  const event = budget?.reserve(role, provider, model, system.length + messages.reduce((n,m)=>n+m.content.length,0), maxOutputTokens);
+  timeoutMs = Math.max(1, Math.min(timeoutMs, budget ? budget.remaining() - 5000 : timeoutMs));
+  const signal = budget?.signal;
   try {
     let result;
     if (provider === "openai") {
-      result = await callOpenAI({ system, messages, maxOutputTokens, timeoutMs });
+      result = await callOpenAI({ system, messages, maxOutputTokens, timeoutMs, model, signal });
     } else if (provider === "anthropic") {
       result = await callAnthropic({
         system,
         messages,
         maxOutputTokens,
-        timeoutMs
+        timeoutMs, model, signal
       });
     } else if (provider === "google") {
-      result = await callGoogle({ system, messages, maxOutputTokens, timeoutMs });
+      result = await callGoogle({ system, messages, maxOutputTokens, timeoutMs, model, signal });
     } else {
       throw new Error("Unknown provider.");
     }
 
+    budget?.complete(event, result);
     markSuccess(provider);
     return result;
   } catch (error) {
+    budget?.complete(event, null, error);
     markFailure(provider);
     throw error;
   }
 }
+
+export function __resetProviderHealthForTests() { health.clear(); }

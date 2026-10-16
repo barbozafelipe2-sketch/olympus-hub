@@ -3,6 +3,7 @@ import { requireSupabase } from "./supabase";
 
 type SendChatInput = {
   messages: ChatMessage[];
+  requestId?: string;
   mode: ModeId;
   conversationId?: string;
   projectContext?: {
@@ -32,6 +33,7 @@ export async function sendChat(
     },
     body: JSON.stringify({
       mode: input.mode,
+      requestId: input.requestId || [...input.messages].reverse().find(m => m.role === "user")?.id || crypto.randomUUID(),
       conversationId: input.conversationId,
       projectContext: input.projectContext,
       messages: input.messages.map(({ role, content }) => ({ role, content }))
