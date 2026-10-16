@@ -87,86 +87,29 @@ test("Olympus degrades to one truthful Zeus route when only one provider is conf
 });
 
 
-test("provider failover cycles through healthy configured providers in both directions", async () => {
+test("fallback attempts consume the Compound cap and remain in the trace", async () => {
   const previousFetch = globalThis.fetch;
-  const previousEnv = {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-    GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY
+  const prev = Object.fromEntries(["OPENAI_API_KEY","ANTHROPIC_API_KEY","GOOGLE_AI_API_KEY","GEMINI_API_KEY"].map(k=>[k,process.env[k]]));
+  process.env.OPENAI_API_KEY="fixture";process.env.ANTHROPIC_API_KEY="fixture";
+  delete process.env.GOOGLE_AI_API_KEY;delete process.env.GEMINI_API_KEY;
+  const {__resetProviderHealthForTests}=await import("../api/lib/providers.js");
+  __resetProviderHealthForTests();
+  let calls=0;
+  globalThis.fetch=async url=>{
+    calls++;
+    if(String(url).includes("anthropic.com"))return new Response(JSON.stringify({error:{message:"fixture"}}),{status:503});
+    return new Response(JSON.stringify({output:[{content:[{type:"output_text",text:"Recovered"}]}],usage:{input_tokens:4,output_tokens:6}}),{status:200});
   };
-  const calls = [];
-  let scenario = 1;
-
-  process.env.OPENAI_API_KEY = "test-openai";
-  process.env.ANTHROPIC_API_KEY = "test-anthropic";
-  process.env.GOOGLE_AI_API_KEY = "test-google";
-  delete process.env.GEMINI_API_KEY;
-
-  globalThis.fetch = async (url) => {
-    const endpoint = String(url);
-    calls.push(endpoint);
-
-    if (scenario === 1) {
-      if (endpoint.includes("api.openai.com")) {
-        return new Response(JSON.stringify({ error: { message: "temporary failure" } }), { status: 503 });
-      }
-      if (endpoint.includes("api.anthropic.com")) {
-        return new Response(JSON.stringify({
-          content: [{ type: "text", text: "Anthropic fallback answer." }],
-          usage: { input_tokens: 4, output_tokens: 6 }
-        }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-    } else {
-      if (endpoint.includes("api.anthropic.com")) {
-        return new Response(JSON.stringify({ error: { message: "temporary failure" } }), { status: 503 });
-      }
-      if (endpoint.includes("api.openai.com")) {
-        return new Response(JSON.stringify({ error: { message: "temporary failure" } }), { status: 503 });
-      }
-    }
-
-    return new Response(JSON.stringify({
-      model: "test-google",
-      steps: [{ type: "model_output", content: [{ type: "text", text: "Google fallback answer." }] }],
-      usage: { total_input_tokens: 4, total_output_tokens: 6, total_tokens: 10 }
-    }), { status: 200, headers: { "content-type": "application/json" } });
-  };
-
   try {
-    const openAiPrimary = await executeMode({
-      mode: "zeus",
-      systemContext: "",
-      messages: [{ role: "user", content: "Say hello." }]
-    });
-    assert.equal(openAiPrimary.provider, "Anthropic");
-    assert.equal(openAiPrimary.fallbackUsed, true);
-    assert.equal(openAiPrimary.trace[0].fallbackFrom, "openai");
-    assert.deepEqual(
-      calls.map((url) => url.includes("api.openai.com") ? "openai" : url.includes("api.anthropic.com") ? "anthropic" : "google"),
-      ["openai", "anthropic"]
-    );
-
-    scenario = 2;
-    calls.length = 0;
-    const anthropicPrimary = await executeMode({
-      mode: "zeus",
-      systemContext: "",
-      messages: [{ role: "user", content: "Rewrite this proposal clearly." }]
-    });
-    assert.equal(anthropicPrimary.provider, "Google AI");
-    assert.equal(anthropicPrimary.fallbackUsed, true);
-    assert.equal(anthropicPrimary.trace[0].fallbackFrom, "anthropic -> openai");
-    assert.deepEqual(
-      calls.map((url) => url.includes("api.openai.com") ? "openai" : url.includes("api.anthropic.com") ? "anthropic" : "google"),
-      ["anthropic", "openai", "google"]
-    );
+    const result=await executeMode({mode:"zeus",systemContext:"",messages:[{role:"user",content:"Fix this bug"}]});
+    assert.equal(calls,2);assert.equal(result.orchestration.calls,2);
+    assert.equal(result.trace.length,2);
+    assert.equal(result.trace[0].outcome,"failed");assert.equal(result.trace[1].outcome,"completed");
+    assert.equal(result.fallbackUsed,true);
+    assert.equal(result.orchestration.degraded,true);
   } finally {
-    globalThis.fetch = previousFetch;
-    for (const [key, value] of Object.entries(previousEnv)) {
-      if (value == null) delete process.env[key];
-      else process.env[key] = value;
-    }
+    globalThis.fetch=previousFetch;__resetProviderHealthForTests();
+    for(const [k,v] of Object.entries(prev)){if(v==null)delete process.env[k];else process.env[k]=v;}
   }
 });
 

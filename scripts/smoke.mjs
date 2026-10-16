@@ -99,9 +99,9 @@ assert(
 
 const orchestrator = readFileSync(resolve("api/lib/orchestrator.js"), "utf8");
 assert(
-  orchestrator.includes("executeZeus") &&
-    orchestrator.includes("executeOlympus") &&
-    orchestrator.includes("withProviderFallback") &&
+  orchestrator.includes("decideGear") &&
+    orchestrator.includes("createBudget") &&
+    orchestrator.includes("budget.events") &&
     orchestrator.includes("Unsupported OlyHub mode.") &&
     !orchestrator.includes("executeDirect") &&
     chatApi.includes('z.enum(["zeus", "olympus"])'),

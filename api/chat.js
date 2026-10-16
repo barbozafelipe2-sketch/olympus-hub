@@ -1,3 +1,9 @@
+import { selectRecentHistory } from "./lib/history.js";
+import { savePhaseCheckpoint } from "./lib/phase-checkpoints.js";
+import { decideCommercialEngine } from "./lib/commercial-routing-policy.js";
+import { createHash } from "node:crypto";
+import { CALL_CAPS, compactInput, createBudget, decideGear, evidenceContext } from "./lib/budget.js";
+import { makeBudgetClient, reserveQuota, settleQuota } from "./lib/quota.js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { executeMode } from "./lib/orchestrator.js";
@@ -5,7 +11,8 @@ import {
   persistRequestedArtifact,
   readRequestedProjectFiles,
   runImageGenerationCapability,
-  runWebSearchCapability
+  runWebSearchCapability,
+  webSearchIntent, imageGenerationIntent
 } from "./lib/capabilities.js";
 import {
   CHECKPOINT_BATCH_SIZE,
@@ -28,6 +35,7 @@ const ProjectContextSchema = z.object({
 
 const BodySchema = z.object({
   mode: ModeSchema.default("zeus"),
+  requestId: z.string().uuid().optional(),
   projectContext: ProjectContextSchema.optional(),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1).max(80)
@@ -138,6 +146,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
       .select("id, role, content, created_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(PROJECT_RECENT_MESSAGES),
     client
       .from("conversation_checkpoints")
@@ -163,12 +172,7 @@ async function loadCanonicalProjectContext(client, identifiers) {
     memories: memoryResult.data ?? [],
     files: fileResult.data ?? [],
     tasks: taskResult.data ?? [],
-    recentMessages: [...(recentResult.data ?? [])]
-      .reverse()
-      .map((message) => ({
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: message.content
-      })),
+    recentMessages: selectRecentHistory(recentResult.data ?? [], { maxChars: 18000, perMessageChars: 12000 }),
     messageCount: messageCountResult.count ?? 0,
     checkpoint: checkpointResult.data ?? null
   };
@@ -198,6 +202,7 @@ async function loadCanonicalHomeConversation(client, conversationId) {
     .select("role, content, created_at")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(40);
 
   if (recentError) throw recentError;
@@ -205,12 +210,7 @@ async function loadCanonicalHomeConversation(client, conversationId) {
   return {
     project: null,
     conversation,
-    recentMessages: [...(recent ?? [])]
-      .reverse()
-      .map((message) => ({
-        role: message.role === "assistant" ? "assistant" : "user",
-        content: message.content
-      }))
+    recentMessages: selectRecentHistory(recent ?? [], { maxChars: 18000, perMessageChars: 12000 })
   };
 }
 
@@ -384,20 +384,10 @@ async function recordExecution(client, input) {
 }
 
 
-function positiveEnvLimit(name) {
-  const value = Number(process.env[name]);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
-}
-
 function numeric(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, number) : 0;
 }
-
-function remaining(limit, used) {
-  return limit == null ? null : Math.max(0, limit - used);
-}
-
 
 function combineUsage(baseUsage, capabilityTraces) {
   const total = {
@@ -422,87 +412,6 @@ function combineUsage(baseUsage, capabilityTraces) {
   }
 
   return total;
-}
-
-async function getQuotaStatus(client, userId) {
-  const [limitResult, summaryResult] = await Promise.all([
-    client
-      .from("account_limits")
-      .select(
-        "plan_code, status, daily_request_limit, daily_token_limit, monthly_token_limit"
-      )
-      .eq("user_id", userId)
-      .maybeSingle(),
-    client.rpc("get_my_usage_summary")
-  ]);
-
-  if (limitResult.error) throw limitResult.error;
-  if (summaryResult.error) throw summaryResult.error;
-
-  const account = limitResult.data || {
-    plan_code: "unassigned",
-    status: "active",
-    daily_request_limit: null,
-    daily_token_limit: null,
-    monthly_token_limit: null
-  };
-  const summary = summaryResult.data?.[0] || {
-    daily_requests: 0,
-    daily_tokens: 0,
-    monthly_tokens: 0
-  };
-
-  const limits = {
-    dailyRequests:
-      account.daily_request_limit ??
-      positiveEnvLimit("OLYHUB_DAILY_REQUEST_LIMIT"),
-    dailyTokens:
-      account.daily_token_limit ??
-      positiveEnvLimit("OLYHUB_DAILY_TOKEN_LIMIT"),
-    monthlyTokens:
-      account.monthly_token_limit ??
-      positiveEnvLimit("OLYHUB_MONTHLY_TOKEN_LIMIT")
-  };
-
-  const usage = {
-    dailyRequests: numeric(summary.daily_requests),
-    dailyTokens: numeric(summary.daily_tokens),
-    monthlyTokens: numeric(summary.monthly_tokens)
-  };
-
-  let reason = null;
-  if (account.status !== "active") {
-    reason = "account_not_active";
-  } else if (
-    limits.dailyRequests != null &&
-    usage.dailyRequests >= limits.dailyRequests
-  ) {
-    reason = "daily_request_limit";
-  } else if (
-    limits.dailyTokens != null &&
-    usage.dailyTokens >= limits.dailyTokens
-  ) {
-    reason = "daily_token_limit";
-  } else if (
-    limits.monthlyTokens != null &&
-    usage.monthlyTokens >= limits.monthlyTokens
-  ) {
-    reason = "monthly_token_limit";
-  }
-
-  return {
-    allowed: reason == null,
-    reason,
-    planCode: account.plan_code,
-    status: account.status,
-    limits,
-    usage,
-    remaining: {
-      dailyRequests: remaining(limits.dailyRequests, usage.dailyRequests),
-      dailyTokens: remaining(limits.dailyTokens, usage.dailyTokens),
-      monthlyTokens: remaining(limits.monthlyTokens, usage.monthlyTokens)
-    }
-  };
 }
 
 async function recordUsageEvents(client, {
@@ -629,29 +538,39 @@ export default async function handler(req, res) {
     }
   }
 
-  let quota;
+  const executionContext = canonicalContext || homeContext;
+  const rawMessages = canonicalContext?.recentMessages?.length
+    ? canonicalContext.recentMessages
+    : homeContext?.recentMessages?.length ? homeContext.recentMessages : messages.slice(-40);
+  const effectiveMessages = compactInput("", rawMessages).messages;
+  const latestUser = [...effectiveMessages].reverse().find(m => m.role === "user")?.content || "";
+  const gear = decideGear(mode, effectiveMessages);
+  const isImage = imageGenerationIntent(latestUser);
+  const maxCalls = isImage ? 1 : Math.max(CALL_CAPS[gear], webSearchIntent(latestUser) ? 2 : 1);
+  const requestId = parsed.data.requestId || crypto.randomUUID();
+  const fingerprint = createHash("sha256").update(JSON.stringify({ mode, projectContext, conversationId, messages })).digest("hex");
+  let budgetClient, quota;
   try {
-    quota = await getQuotaStatus(auth.client, auth.user.id);
+    budgetClient = makeBudgetClient();
+    quota = await reserveQuota(budgetClient, { ownerId: auth.user.id, requestId, fingerprint, maxCalls, kind: isImage ? "image" : "text", mode });
   } catch (error) {
-    console.error("OlyHub quota preflight failure", {
-      userId: auth.user.id,
-      code: error?.code
-    });
-    return res.status(503).json({
-      error: "OlyHub could not verify account usage limits."
+    console.error("Budget reservation unavailable", { code: error?.code });
+    return res.status(503).json({ error: "OlyHub could not reserve this account's usage budget.", code: error?.code || "BUDGET_UNAVAILABLE" });
+  }
+  if (!quota?.allowed) {
+    const conflict = ["request_id_reused", "request_already_consumed"].includes(quota?.reason);
+    return res.status(conflict ? 409 : ["account_not_active", "olympus_not_entitled"].includes(quota?.reason) ? 403 : 429).json({
+      error: conflict ? "This request has already been accepted. Check the conversation before submitting a new request." : "This account cannot start another AI request within its current budget.",
+      code: quota?.reason, quota
     });
   }
-
-  if (!quota.allowed) {
-    const accountBlocked = quota.reason === "account_not_active";
-    return res.status(accountBlocked ? 403 : 429).json({
-      error: accountBlocked
-        ? "This OlyHub account is not active."
-        : "This OlyHub account has reached a configured usage limit.",
-      quota
-    });
-  }
-
+  const commercialDecision = decideCommercialEngine({ activation: "manual", manualOlympus: mode === "olympus", olympusEntitled: quota.olympusEntitled === true, allowanceAvailable: true, complexity: gear === "simple" ? "simple" : "complex", needsReview: gear !== "simple" });
+  const startedAt = Date.now();
+  const budget = createBudget({ maxCalls, startedAt });
+  let imageCapability = { traces: [], artifact: null };
+  let fileCapability = { context: "", traces: [] };
+  let webCapability = { context: "", traces: [], sources: [] };
+  try {
   if (canonicalContext) {
     try {
       canonicalContext = await refreshConversationCheckpoint(
@@ -668,26 +587,18 @@ export default async function handler(req, res) {
     }
   }
 
-  const executionContext = canonicalContext || homeContext;
-  const effectiveMessages = canonicalContext?.recentMessages?.length
-    ? canonicalContext.recentMessages
-    : homeContext?.recentMessages?.length
-      ? homeContext.recentMessages
-      : messages.slice(-40);
-
-  const startedAt = Date.now();
-  const imageCapability = await runImageGenerationCapability({
+  imageCapability = await runImageGenerationCapability({
     client: auth.client,
     ownerId: auth.user.id,
     context: executionContext,
-    messages: effectiveMessages
+    messages: effectiveMessages, budget
   });
   const imageTrace = imageCapability.traces.find(
     (capability) => capability.name === "generate_image"
   );
   const imageAttempted = Boolean(imageTrace);
 
-  const [fileCapability, webCapability] = imageAttempted
+  [fileCapability, webCapability] = imageAttempted
     ? [
         { context: "", traces: [] },
         { context: "", traces: [], sources: [] }
@@ -701,11 +612,10 @@ export default async function handler(req, res) {
             })
           : Promise.resolve({ context: "", traces: [] }),
         runWebSearchCapability({
-          messages: effectiveMessages
+          messages: effectiveMessages, budget
         })
       ]);
 
-  try {
     const imageSucceeded =
       imageAttempted && imageTrace?.status === "completed" && imageCapability.artifact;
 
@@ -736,12 +646,11 @@ export default async function handler(req, res) {
           }
         }
       : await executeMode({
-          mode,
+          mode: commercialDecision.engine,
           messages: effectiveMessages,
-          systemContext:
-            buildProjectSystemContext(canonicalContext) +
-            fileCapability.context +
-            webCapability.context
+          systemContext: evidenceContext({ project: buildProjectSystemContext(canonicalContext), files: fileCapability.context, web: webCapability.context }),
+          budget, gear,
+          onStage: executionContext?.conversation?.id ? ({ stage, result }) => savePhaseCheckpoint(budgetClient, { ownerId: auth.user.id, requestId, conversationId: executionContext.conversation.id, stage, result }) : null
         });
 
     const artifactCapability = imageAttempted
@@ -764,10 +673,11 @@ export default async function handler(req, res) {
     );
     const orchestration = {
       ...result.orchestration,
+      calls: budget.calls, maxCalls, level: result.orchestration.level || gear,
       degraded: result.orchestration.degraded || capabilityDegraded
     };
 
-    const executionId = await recordExecution(auth.client, {
+    const executionId = await recordExecution(budgetClient, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
       conversation_id: executionContext?.conversation.id ?? null,
@@ -777,7 +687,7 @@ export default async function handler(req, res) {
       model: result.model,
       request_id: result.requestId,
       fallback_used: result.fallbackUsed,
-      call_count: orchestration.calls,
+      call_count: Math.max(1, budget.calls),
       multi_provider: orchestration.multiProvider,
       degraded: orchestration.degraded,
       trace: {
@@ -788,7 +698,9 @@ export default async function handler(req, res) {
     });
 
     const usage = combineUsage(result.usage, capabilities);
-    const usageRecorded = await recordUsageEvents(auth.client, {
+    usage.reported = budget.events.every(e => e.usage?.reported === true);
+    usage.chargedTokens = budget.chargedTokens();
+    const usageRecorded = await recordUsageEvents(budgetClient, {
       executionId,
       ownerId: auth.user.id,
       projectId: canonicalContext?.project.id ?? null,
@@ -796,6 +708,7 @@ export default async function handler(req, res) {
       capabilities
     });
 
+    await settleQuota(budgetClient, { ownerId: auth.user.id, requestId, budget });
     return res.status(200).json({
       ...result,
       usage,
@@ -813,9 +726,9 @@ export default async function handler(req, res) {
       error instanceof Error &&
       (error.unavailable === true || /unavailable/i.test(error.message));
 
-    const requestId = error?.requestId || crypto.randomUUID();
+    const providerRequestId = error?.requestId || requestId;
 
-    await recordExecution(auth.client, {
+    await recordExecution(budgetClient, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
       conversation_id: executionContext?.conversation.id ?? null,
@@ -823,20 +736,13 @@ export default async function handler(req, res) {
       status: "failed",
       provider: error?.provider || "unknown",
       model: "unknown",
-      request_id: requestId,
+      request_id: providerRequestId,
       fallback_used: false,
-      call_count: 1,
+      call_count: Math.max(1, budget.calls),
       multi_provider: false,
       degraded: true,
       trace: {
-        model_calls: [
-          {
-            role: "failed-route",
-            providerId: error?.provider || "unknown",
-            requestId,
-            status: error?.status || null
-          }
-        ],
+        model_calls: budget.events,
         capabilities: [
           ...fileCapability.traces,
           ...webCapability.traces,
@@ -846,6 +752,8 @@ export default async function handler(req, res) {
       latency_ms: Math.min(300000, Date.now() - startedAt)
     });
 
+    try { await settleQuota(budgetClient, { ownerId: auth.user.id, requestId, budget, failed: true }); }
+    catch (settlementError) { console.error("Budget settlement deferred", { code: settlementError?.code }); }
     console.error("OlyHub orchestration failure", {
       userId: auth.user.id,
       mode,
@@ -863,5 +771,5 @@ export default async function handler(req, res) {
           : "OlyHub could not complete the AI route.",
       requestId
     });
-  }
+  } finally { budget.close(); }
 }

@@ -45,3 +45,7 @@ Provider selection and data handling can change. The final policy and review not
 ## Audit scope and limits
 
 This is a static repository inspection. It does not inspect live Supabase project settings, production secrets, provider account retention settings, hosting logs, or third-party SDK reports. No advertising or analytics SDK was found in the inspected native source/dependency configuration; confirm this again when production integrations are finalized.
+
+## Commercial engine adaptation
+
+`ai_stage_checkpoints` stores private intermediate model drafts under the authenticated owner and conversation. Conversation deletion removes these drafts. `ai_budget_requests` stores attempt metadata and quota debits independently of conversation content, so deleting a chat does not reset usage. Complete account deletion removes both through the account-owner foreign key. No prompt or draft text is stored in the financial trace.

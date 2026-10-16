@@ -24,7 +24,7 @@ function number(value: number) {
 }
 
 function limit(value: number | null) {
-  return value == null ? "Not configured" : number(value);
+  return value == null ? "Server default" : number(value);
 }
 
 function executionTime(value: string) {
@@ -150,11 +150,11 @@ export function SettingsView({ email }: Props) {
                 <dd>{number(settings.usage.dailyRequests)}</dd>
               </div>
               <div>
-                <dt>Tokens today</dt>
+                <dt>Budget tokens today</dt>
                 <dd>{number(settings.usage.dailyTokens)}</dd>
               </div>
               <div>
-                <dt>Tokens this month</dt>
+                <dt>Budget tokens this month</dt>
                 <dd>{number(settings.usage.monthlyTokens)}</dd>
               </div>
             </dl>
@@ -183,8 +183,8 @@ export function SettingsView({ email }: Props) {
               </div>
             </dl>
             <p className="settings-note">
-              “Not configured” means the account-specific database limit is empty.
-              Deployment-wide server limits may still apply.
+              Server defaults apply when no custom account limit is set.
+              Budget usage includes reserved capacity for unfinished or unmeasured requests.
             </p>
           </section>
 
