@@ -4,7 +4,7 @@ import { requireSupabase } from "./supabase";
 
 const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
 
-export const modes: Array<{ id: ModeId; label: string; detail: string }> = [
+export const modes: { id: ModeId; label: string; detail: string }[] = [
   { id: "zeus", label: "Zeus", detail: "Smart routing with provider failover" },
   { id: "olympus", label: "Olympus", detail: "Multi-model council" },
 ];
@@ -35,6 +35,8 @@ export async function sendChat(input: {
   conversationId: string;
   messages: ChatMessage[];
   mode: ModeId;
+  olympusAuto?: boolean;
+  requestId?: string;
   projectId?: string | null;
 }) {
   if (!apiBase) throw new Error("The OlyHub API address is not configured.");
@@ -52,6 +54,8 @@ export async function sendChat(input: {
     },
     body: JSON.stringify({
       mode: input.mode,
+      olympusAuto: input.olympusAuto === true,
+      requestId: input.requestId,
       conversationId: input.conversationId,
       projectContext: input.projectId
         ? {

@@ -1,3 +1,4 @@
+import { OlympusAutoToggle } from "./OlympusAutoToggle";
 import {
   ArrowLeft,
   Brain,
@@ -450,7 +451,7 @@ export function ProjectWorkspace({
     }
   }
 
-  async function generateAssistant(nextMessages: ChatMessage[]) {
+  async function generateAssistant(nextMessages: ChatMessage[], newAttempt = false) {
     if (!conversationId || isSending) return;
 
     setIsSending(true);
@@ -465,6 +466,7 @@ export function ProjectWorkspace({
       const result = await sendChat(
         {
           mode,
+          ...(newAttempt ? { requestId: crypto.randomUUID() } : {}),
           projectContext: {
             projectId: project.id,
             conversationId
@@ -526,6 +528,10 @@ export function ProjectWorkspace({
         console.warn("Project timestamp refresh failed", touchError);
         setError("Response saved. Project activity timestamp could not refresh.");
       }
+      if (result.orchestration.degraded) {
+        setRetryAvailable(true);
+        setError("Some stages could not complete. The available response was saved; you can try again.");
+      }
     } catch (caught) {
       setRetryAvailable(true);
       setError(
@@ -579,7 +585,8 @@ export function ProjectWorkspace({
     }
 
     setMessages(latest.length > 0 ? latest : [projectWelcome(project)]);
-    await generateAssistant(latest);
+    if (!window.confirm("Try again? This is a new paid attempt and counts toward your usage.")) return;
+    await generateAssistant(latest, true);
   }
 
   return (
@@ -608,6 +615,7 @@ export function ProjectWorkspace({
             ))}
           </select>
         </label>
+        <OlympusAutoToggle disabled={isSending} />
       </header>
 
       <div className="project-workspace-body">
@@ -657,7 +665,7 @@ export function ProjectWorkspace({
                 {retryAvailable && (
                   <button onClick={() => void retry()} disabled={isSending}>
                     <RotateCcw size={14} />
-                    Retry saved message
+                    Try again
                   </button>
                 )}
               </div>

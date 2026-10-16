@@ -1,3 +1,4 @@
+import { redactSecrets } from "./budget.js";
 const READABLE_MIME_TYPES = new Set([
   "text/plain",
   "text/markdown",
@@ -18,7 +19,7 @@ function normalize(value) {
   return value.toLowerCase().normalize("NFKC");
 }
 
-function webSearchIntent(text) {
+export function webSearchIntent(text) {
   if (
     /(search|research|look up|find online|web|internet|latest|today|tonight|this week|this month|news|recent|up to date|pesquise|pesquisar|procure|buscar|busque|internet|web|mais recente|hoje|esta semana|este mês|not[ií]cias|recente)/i.test(
       text
@@ -43,6 +44,7 @@ function openAIWebUsage(data) {
   const outputTokens = usageNumber(usage.output_tokens);
 
   return {
+    reported: data?.usage != null && data.usage.input_tokens != null,
     inputTokens,
     outputTokens,
     cachedInputTokens: usageNumber(usage.input_tokens_details?.cached_tokens),
@@ -111,8 +113,8 @@ function webSources(data) {
   }).slice(0, 12);
 }
 
-export async function runWebSearchCapability({ messages }) {
-  const userText = latestUser(messages);
+export async function runWebSearchCapability({ messages, budget = null }) {
+  const userText = redactSecrets(latestUser(messages)).slice(0, 12000);
   if (!webSearchIntent(userText)) {
     return {
       context: "",
@@ -138,9 +140,11 @@ export async function runWebSearchCapability({ messages }) {
 
   const model = process.env.OPENAI_WEB_SEARCH_MODEL || "gpt-5.5";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(20000, budget ? budget.remaining() - 5000 : 20000)));
+  let event = null;
 
   try {
+    event = budget?.reserve("capability:web_search", "openai", model, userText.length, 1800);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -163,10 +167,11 @@ export async function runWebSearchCapability({ messages }) {
         include: ["web_search_call.action.sources"],
         max_output_tokens: 1800
       }),
-      signal: controller.signal
+      signal: budget ? AbortSignal.any([controller.signal, budget.signal]) : controller.signal
     });
 
     const data = await response.json().catch(() => null);
+    if (event) budget.complete(event, { usage: openAIWebUsage(data), requestId: data?.id }, response.ok ? null : { status: response.status });
     const requestId =
       response.headers.get("x-request-id") ||
       data?.id ||
@@ -215,6 +220,7 @@ export async function runWebSearchCapability({ messages }) {
       sources
     };
   } catch (error) {
+    if (event && event.outcome === "pending") budget.complete(event, null, error);
     return {
       context:
         "\n\nThe user requested current/web-verified information, but OlyHub web search failed. Do not claim that current information was verified.",
@@ -235,7 +241,7 @@ export async function runWebSearchCapability({ messages }) {
   }
 }
 
-function imageGenerationIntent(text) {
+export function imageGenerationIntent(text) {
   return /(create|generate|draw|render|make|design|crie|criar|gere|gerar|desenhe|renderize|faça|fazer|designe).{0,80}(image|picture|photo|illustration|logo|icon|poster|artwork|imagem|foto|ilustra[cç][aã]o|logotipo|ícone|icone|p[oô]ster|arte)/i.test(
     text
   );
@@ -254,9 +260,10 @@ export async function runImageGenerationCapability({
   client,
   ownerId,
   context,
-  messages
+  messages,
+  budget = null
 }) {
-  const userText = latestUser(messages);
+  const userText = redactSecrets(latestUser(messages)).slice(0, 12000);
 
   if (!imageGenerationIntent(userText)) {
     return {
@@ -319,12 +326,14 @@ export async function runImageGenerationCapability({
   const imageModel =
     process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 78_000);
+  const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(65000, budget ? budget.remaining() - 5000 : 65000)));
+  let event = null;
 
   let artifactId = null;
   let storagePath = null;
 
   try {
+    event = budget?.reserve("capability:generate_image", "openai", routerModel + " + " + imageModel, userText.length, 4096);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -333,6 +342,7 @@ export async function runImageGenerationCapability({
       },
       body: JSON.stringify({
         model: routerModel,
+        max_output_tokens: 4096,
         input: userText,
         tools: [
           {
@@ -345,10 +355,11 @@ export async function runImageGenerationCapability({
           type: "image_generation"
         }
       }),
-      signal: controller.signal
+      signal: budget ? AbortSignal.any([controller.signal, budget.signal]) : controller.signal
     });
 
     const data = await response.json().catch(() => null);
+    if (event) budget.complete(event, { usage: openAIWebUsage(data), requestId: data?.id }, response.ok ? null : { status: response.status });
     const requestId =
       response.headers.get("x-request-id") ||
       data?.id ||
@@ -467,6 +478,7 @@ export async function runImageGenerationCapability({
       artifact
     };
   } catch (error) {
+    if (event && event.outcome === "pending") budget.complete(event, null, error);
     if (storagePath) {
       await client.storage
         .from("artifact-files")
@@ -537,7 +549,7 @@ export async function readRequestedProjectFiles({
   files,
   messages
 }) {
-  const userText = latestUser(messages);
+  const userText = redactSecrets(latestUser(messages)).slice(0, 12000);
   const requested = requestedFiles(userText, files);
   const candidates = requested
     .filter((file) =>
@@ -777,7 +789,7 @@ export async function persistRequestedArtifact({
     };
   }
 
-  const userText = latestUser(messages);
+  const userText = redactSecrets(latestUser(messages)).slice(0, 12000);
   const wantsRevision = artifactReviseIntent(userText);
   const wantsCreate = artifactCreateIntent(userText);
 

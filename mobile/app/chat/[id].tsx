@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   Share,
+  Switch,
   Text,
   TextInput,
   View,
@@ -47,6 +48,8 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [artifacts, setArtifacts] = useState<NativeArtifact[]>([]);
   const [prompt, setPrompt] = useState("");
+  const [olympusAuto, setOlympusAuto] = useState(false);
+  const [failedText, setFailedText] = useState<string | null>(null);
   const [mode, setMode] = useState<ModeId>("zeus");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -59,35 +62,28 @@ export default function ChatScreen() {
     [mode],
   );
 
-  const load = useCallback(async () => {
-    if (!conversationId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [row, history, artifactResult] = await Promise.all([
-        getConversation(conversationId),
-        getMessages(conversationId),
-        requireSupabase()
-          .from("artifacts")
-          .select("id,title,mime_type,current_version,updated_at")
-          .eq("conversation_id", conversationId)
-          .eq("status", "active")
-          .order("updated_at", { ascending: false }),
-      ]);
+  const load = useCallback(() => {
+    if (!conversationId) return Promise.resolve();
+    return Promise.all([
+      getConversation(conversationId),
+      getMessages(conversationId),
+      requireSupabase()
+        .from("artifacts")
+        .select("id,title,mime_type,current_version,updated_at")
+        .eq("conversation_id", conversationId)
+        .eq("status", "active")
+        .order("updated_at", { ascending: false }),
+    ]).then(([row, history, artifactResult]) => {
       if (artifactResult.error) throw artifactResult.error;
+      setError("");
+      setFailedText(null);
       setConversation(row);
       setMode(modes.some((item) => item.id === row.mode) ? row.mode : "zeus");
       setMessages(history);
       setArtifacts((artifactResult.data ?? []) as NativeArtifact[]);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Could not restore this conversation.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    }).catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : "Could not restore this conversation.");
+    }).finally(() => setLoading(false));
   }, [conversationId]);
   useEffect(() => {
     void load();
@@ -108,28 +104,30 @@ export default function ChatScreen() {
     }
   }
 
-  async function submit() {
-    const content = prompt.trim();
-    if (!content || sending || loading || !session?.user.id || !conversation)
+  async function submit(retryText?: string) {
+    const content = (retryText ?? prompt).trim();
+    if (!content || sending || loading || !session?.user.id || !conversation || conversation.id !== conversationId)
       return;
     if (!hasAiProviderConsent(session.user.id)) {
       setConsentOpen(true);
       return;
     }
     setPrompt("");
+    setFailedText(null);
     setError("");
     setRunLabel("");
     setSending(true);
     let saved = false;
     try {
-      const userRow = await persistMessage({
+      const existingUser = retryText ? [...messages].reverse().find(m => m.role === "user" && m.content === content) : null;
+      const userRow = existingUser ?? await persistMessage({
         ownerId: session.user.id,
         conversationId,
         role: "user",
         content,
       });
       saved = true;
-      const next = [...messages, userRow];
+      const next = existingUser ? messages : [...messages, userRow];
       setMessages(next);
       const title = content.replace(/\s+/g, " ").slice(0, 72);
       if (conversation.title === "New chat") {
@@ -139,6 +137,8 @@ export default function ChatScreen() {
       const result = await sendChat({
         conversationId,
         mode,
+        olympusAuto,
+        requestId: retryText ? undefined : userRow.id,
         projectId: conversation.project_id,
         messages: next,
       });
@@ -175,7 +175,12 @@ export default function ChatScreen() {
         `${result.provider} · ${result.model}${result.fallbackUsed ? " · fallback" : ""}${result.orchestration.degraded ? " · degraded" : ""}`,
       );
       await updateConversation(conversationId, { mode });
+      if (result.orchestration.degraded) {
+        setFailedText(content);
+        setError("Some stages could not complete. The available response was saved; you can try again.");
+      }
     } catch (caught) {
+      setFailedText(content);
       setError(
         `${saved ? "Your message is saved. " : ""}${caught instanceof Error ? caught.message : "OlyHub could not complete this request."}`,
       );
@@ -322,7 +327,7 @@ export default function ChatScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Reload conversation"
-            onPress={() => void load()}
+            onPress={() => { setLoading(true); setError(""); void load(); }}
           >
             <Text style={{ color: C.gold, fontSize: 20 }}>↻</Text>
           </Pressable>
@@ -367,6 +372,10 @@ export default function ChatScreen() {
             )}
           />
         </View>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16 }}>
+          <Text style={{ color: C.muted }}>Olympus automatic: {olympusAuto ? "On" : "Off"}</Text>
+          <Switch accessibilityLabel="Olympus automatic" value={olympusAuto} onValueChange={setOlympusAuto} disabled={sending} />
+        </View>
         {!!error && (
           <View
             style={{
@@ -383,6 +392,10 @@ export default function ChatScreen() {
             >
               {error}
             </Text>
+            {failedText && <Button title="Try again" disabled={sending} onPress={() => Alert.alert("Try again?", "This is a new paid attempt and counts toward your usage.", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Try again", onPress: () => void submit(failedText) }
+            ])} />}
           </View>
         )}
         {!!runLabel && (

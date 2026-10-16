@@ -25,11 +25,11 @@ The target experience is: **“my work is already here and OlyHub already knows 
 - Persistent clickable web-source citations restored with conversation history.
 - Versioned artifacts in Home and Projects with download/delete and immutable revisions.
 - Server-side OpenAI, Anthropic and Google AI provider adapters.
-- Zeus routing across configured providers with bounded mutual failover and conditional reviewer/director flow.
-- Olympus multi-call specialist + critic + Director flow.
+- Zeus Simple/Compound and Olympus Compound Plus/Turbo with shared 1/2/3/4-attempt budgets.
+- Economy model tiers for intermediate work and configurable premium finalizers.
 - Durable execution traces with exact provider/model/request routing.
 - Provider-reported token usage aggregated across every orchestration call.
-- Server-side usage ledger and configurable account/global quotas.
+- Durable accounting independent of conversations, atomic quota reservations, concurrency controls and bounded image generation.
 - Settings surface for usage, plan state and account limits.
 - Complete server-side account deletion including private Storage cleanup.
 - Persistent onboarding.
@@ -54,11 +54,11 @@ Home supports persistent conversations and versioned artifacts. Persistent file 
 
 ## Provider behavior
 
-Providers form a mutual fallback pool: Zeus tries its selected healthy provider first, then each other configured healthy provider once. OpenAI is the first alternate when it was not the failed provider, and its key enables hosted web search.
+The server deterministically selects Simple (1 attempt), Compound (2), Compound Plus (3), or Turbo (4). Every outbound attempt, including a failed attempt and web research, consumes the same request budget. Simple has no retry headroom. Compound may recover an author failure using its second call, returning an explicitly degraded result instead of pretending a review also ran.
 
-- The product exposes only Zeus and Olympus in web and native interfaces; users do not choose a provider directly.
-- Provider adapters remain internal routing capabilities. Zeus chooses a route and may add one reviewer for higher-value review cases. If a provider fails, the server tries each remaining configured, healthy provider at most once for that stage; failed Olympus specialists trigger honest degradation rather than duplicate-provider council calls.
-- Olympus uses distinct specialist providers when available; with fewer than two it returns a Zeus answer marked degraded instead of simulating a council with duplicate calls to one provider.
+Only Zeus and Olympus are user-facing modes. Olympus with fewer than two configured providers returns a single Zeus answer marked degraded. Web research is preserved when requested and shares the gear budget; it never silently disappears to make room for review. Image generation is bounded separately to two requests per account/day by default.
+
+See [Zeus port and remaining work](docs/ZEUS_PORT.md) and [cost controls and rollout](docs/COST_CONTROLS.md) for defaults, model overrides, migration ordering and accounting semantics.
 
 The UI trace describes what actually ran. Configured credentials are not described as live provider health.
 
@@ -73,7 +73,7 @@ Server-only:
 
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
-- `SUPABASE_SECRET_KEY` — required for complete account deletion
+- `SUPABASE_SECRET_KEY` — required for server-only budget reservations, receipts and complete account deletion
 - `OPENAI_API_KEY`
 - `OPENAI_DEFAULT_MODEL` — optional
 - `OPENAI_FALLBACK_MODEL` — optional
@@ -82,9 +82,12 @@ Server-only:
 - `ANTHROPIC_MODEL` — optional
 - `GOOGLE_AI_API_KEY` — optional
 - `GOOGLE_AI_MODEL` — optional
-- `OLYHUB_DAILY_REQUEST_LIMIT` — optional global safety limit
-- `OLYHUB_DAILY_TOKEN_LIMIT` — optional global safety limit
-- `OLYHUB_MONTHLY_TOKEN_LIMIT` — optional global safety limit
+- `OLYHUB_DAILY_REQUEST_LIMIT` — optional per-account fallback; default 20
+- `OLYHUB_DAILY_TOKEN_LIMIT` — optional per-account fallback; default 1,000,000
+- `OLYHUB_MONTHLY_TOKEN_LIMIT` — optional per-account fallback; default 10,000,000
+- `OLYHUB_CONCURRENT_REQUEST_LIMIT` — default 1 per account, maximum 5
+- `OLYHUB_IMAGE_DAILY_REQUEST_LIMIT` — default 2 per account
+- `{OPENAI,ANTHROPIC,GOOGLE}_{ECONOMY,PREMIUM}_MODEL` — optional role-specific models
 
 Never expose a Supabase secret/admin key or provider key through a `VITE_*` variable.
 
@@ -107,12 +110,15 @@ Current commercial tables include:
 - `executions`
 - `account_limits`
 - `usage_events`
+- `ai_budget_requests`
+- `ai_stage_checkpoints`
 
 All exposed product tables have RLS enabled.
 
 ## Validation
 
 - `npm ci`
+- `npm test`
 - `npm run typecheck`
 - `npm run build`
 - `npm run smoke`

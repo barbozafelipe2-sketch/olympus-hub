@@ -23,6 +23,8 @@ export type AttachmentDraft = {
 };
 
 export type ApiUsage = {
+  reported?: boolean;
+  chargedTokens?: number;
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
@@ -39,7 +41,8 @@ export type ApiTraceEntry = {
   model: string;
   requestId: string;
   fallbackFrom: string | null;
-  usage: ApiUsage;
+  usage: ApiUsage | null;
+  outcome?: "pending" | "failed" | "completed";
 };
 
 export type ApiCapabilityTrace = {

@@ -171,48 +171,13 @@ Gemini Interactions API.
 
 Provider credentials are server-only. A small in-process failure circuit temporarily blocks a repeatedly failing provider inside the running instance.
 
-## Zeus
+## Zeus / Olympus execution and cost controls
 
-Zeus is the default daily orchestration layer.
+The commercial adapter uses four deterministic gears: Simple (1 attempt), Compound (2), Compound Plus (3), Turbo (4). There is no paid Planner. Economy model tiers handle intermediate stages and configured premium models handle finalization. A single request budget includes capabilities, failures and fallbacks; the outbound deadline is 75 seconds. Context is sanitized and limited to 24,000 characters per call, with recent conversation turns prioritized.
 
-1. Inspect request shape.
-2. Choose a configured route.
-3. On provider failure, try remaining configured healthy providers once; OpenAI is preferred among alternates when available.
-4. For review-worthy work, allow one focused reviewer.
-5. Integrate with a Director call.
-6. Return one result plus execution trace.
+Financial accounting lives in `ai_budget_requests`, independently of projects/conversations. Atomic server-only reservation RPCs serialize requests per account before any provider spend. Users can read their own records, but cannot reserve, settle, or insert financial receipts. Reservations include a conservative token allowance and configurable concurrency/image limits. Successful and failed runs settle measured usage when available; unknown usage and workers killed before settlement retain an allowance rather than silently becoming zero. Deleting conversation content preserves execution receipts and accounting. Complete account deletion still removes the owner's data.
 
-## Olympus
-
-Olympus is a real multi-call orchestration mode.
-
-1. Run 2 distinct provider specialists, or up to 3 for heavier work.
-2. Keep successful specialist calls if another fails.
-3. Run one focused critic when available.
-4. Director synthesizes one final result.
-5. Persist exact provider/model/request trace.
-
-If fewer than two providers are available, Olympus runs one Zeus route and marks the execution degraded. It does not label repeated calls to one provider as a multi-provider council.
-
-The product does not claim a provider participated unless it appears in the execution trace.
-
-## Usage and quotas
-
-Each provider adapter normalizes provider-reported token usage. Zeus/Olympus aggregate all calls.
-
-`usage_events` records per model call:
-- provider
-- model
-- orchestration role
-- request id
-- input/output tokens
-- cache usage where available
-- reasoning/thought tokens where available
-- tool tokens where available
-
-Dollar cost is deliberately nullable until OlyHub has a versioned pricing source. No cost is guessed from characters.
-
-`account_limits` supports optional per-user limits. Optional deployment-wide env limits are fallback controls. Quota preflight happens before provider tokens are spent.
+Provider-reported tokens are distinct from conservative budget charges, and neither is a dollar invoice. See [COST_CONTROLS.md](COST_CONTROLS.md) for configuration, migration order and release verification.
 
 ## Execution traces
 

@@ -2188,3 +2188,16 @@ select:focus-visible {
   text-overflow: ellipsis;
   font-size: 9px;
 }
+
+.olympus-auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.olympus-auto input { accent-color: var(--gold); }
+.topbar:has(.olympus-auto) { height: auto; min-height: 74px; flex-wrap: wrap; }
+.topbar > .olympus-auto { flex-basis: 100%; }
+.project-workspace-header > .olympus-auto { grid-column: 1 / -1; }

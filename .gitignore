@@ -11,3 +11,5 @@ coverage
 mobile/.expo
 mobile/ios
 mobile/android
+
+supabase/.temp/

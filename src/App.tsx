@@ -1,3 +1,4 @@
+import { OlympusAutoToggle } from "./components/OlympusAutoToggle";
 import {
   Archive,
   ChevronDown,
@@ -122,6 +123,7 @@ export default function App() {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
+  const [failedText, setFailedText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
 
@@ -294,6 +296,7 @@ export default function App() {
         listConversationArtifacts(conversation.id)
       ]);
 
+      setFailedText(null);
       setActiveHomeConversation(conversation);
       setMessages(savedMessages.length > 0 ? savedMessages : initialMessages);
       setHomeArtifacts(savedArtifacts);
@@ -392,11 +395,12 @@ export default function App() {
     }
   }
 
-  async function submit() {
-    const text = prompt.trim();
+  async function submit(retryText?: string) {
+    const text = (retryText ?? prompt).trim();
     if (!text || isSending || homeLoading) return;
 
     setPrompt("");
+    setFailedText(null);
     setError(null);
     setRunMeta(null);
     setIsSending(true);
@@ -407,7 +411,8 @@ export default function App() {
 
     try {
       const conversation = await ensureHomeConversation();
-      const persistedUser = await persistMessage({
+      const existingUser = retryText ? [...messages].reverse().find(m => m.role === "user" && m.content === text) : null;
+      const persistedUser = existingUser ?? await persistMessage({
         conversationId: conversation.id,
         ownerId: userId,
         role: "user",
@@ -415,7 +420,7 @@ export default function App() {
       });
       userSaved = true;
 
-      const nextMessages = [...messages, persistedUser];
+      const nextMessages = existingUser ? messages : [...messages, persistedUser];
       setMessages(nextMessages);
 
       let localConversation = conversation;
@@ -441,6 +446,7 @@ export default function App() {
             .filter((message) => message.id !== "welcome")
             .slice(-40),
           mode,
+          ...(retryText ? { requestId: crypto.randomUUID() } : {}),
           conversationId: conversation.id
         },
         controller.signal
@@ -498,6 +504,10 @@ export default function App() {
         totalTokens: result.usage.totalTokens,
         usageRecorded: result.usageRecorded
       });
+      if (result.orchestration.degraded) {
+        setFailedText(text);
+        setError("Some stages could not complete. The available response was saved; you can try again.");
+      }
     } catch (err) {
       const base =
         err instanceof DOMException && err.name === "AbortError"
@@ -505,6 +515,7 @@ export default function App() {
           : err instanceof Error
             ? err.message
             : "Unexpected request failure.";
+      setFailedText(text);
       setError(userSaved ? "Your message is saved. " + base : base);
     } finally {
       window.clearTimeout(timeout);
@@ -780,6 +791,7 @@ export default function App() {
               <ChevronDown size={15} aria-hidden="true" />
             </label>
           )}
+          {view === "home" && <OlympusAutoToggle disabled={isSending} />}
         </header>
 
         {view === "home" ? (
@@ -825,7 +837,11 @@ export default function App() {
                   </article>
                 )}
 
-                {error && <div className="error-banner">{error}</div>}
+                {error && <div className="error-banner" role="alert">{error}
+                  {failedText && <button disabled={isSending} onClick={() => {
+                    if (window.confirm("Try again? This is a new paid attempt and counts toward your usage.")) void submit(failedText);
+                  }}>Try again</button>}
+                </div>}
               </div>
 
               <div className="composer-wrap">
