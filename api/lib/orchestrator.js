@@ -24,7 +24,9 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   if (!available.length) { if (ownBudget) budget.close(); throw Object.assign(new Error("AI providers unavailable."), { unavailable: true }); }
   const input = compactInput(SYSTEM + "\n" + systemContext, messages);
   const original = excerpt(latest(input.messages), 6000);
-  const routing = await classifyWithCheapAi(original, { budget, available });
+  const routing = budget.aiRouterReserved
+    ? await classifyWithCheapAi(original, { budget, available })
+    : {domain:requestDomain(original),source:"rules_fallback",model:null}; // preserve fixed legacy caps
   const domain = routing.domain;
   let last = null;
   let stageFailures = 0;

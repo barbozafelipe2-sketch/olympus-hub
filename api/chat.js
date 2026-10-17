@@ -575,6 +575,7 @@ export default async function handler(req, res) {
   const commercialDecision = decideCommercialEngine({ activation: olympusAuto && requestedMode === "zeus" && !isImage ? "automatic" : "manual", manualOlympus: mode === "olympus", olympusEntitled: quota.olympusEntitled === true, allowanceAvailable: true, complexity: mode === "olympus" ? "complex" : "simple", needsReview: gear !== "simple" });
   const startedAt = Date.now();
   const budget = createBudget({ maxCalls, startedAt });
+  budget.aiRouterReserved = !isImage; // quota admission already includes this extra metered call
   let imageCapability = { traces: [], artifact: null };
   let fileCapability = { context: "", traces: [] };
   let webCapability = { context: "", traces: [], sources: [] };

@@ -32,10 +32,10 @@ test("API blocks provider spend before reservation and settles failed attempts",
     assert.equal((await invoke()).code,429);assert.equal(providerCalls,0);
     failReservation=true;assert.equal((await invoke()).code,503);assert.equal(providerCalls,0);
     failReservation=false;allowed=true;
-    assert.equal((await invoke()).code,502);assert.equal(providerCalls,1);
+    assert.equal((await invoke()).code,502);assert.equal(providerCalls,2); // router + authorized answer attempt
     assert.equal(settlements.length,1);
     assert.equal(settlements[0].p_failed,true);
-    assert.equal(settlements[0].p_trace.length,1);
+    assert.equal(settlements[0].p_trace.length,2);
     assert.ok(settlements[0].p_charged_tokens>0,"unknown paid-attempt usage must not become zero");
   } finally {
     globalThis.fetch=oldFetch;
