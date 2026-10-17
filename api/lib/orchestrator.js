@@ -1,4 +1,5 @@
 import { orderProviders, requestDomain, modelFamily } from "./model-routing.js";
+import { classifyWithCheapAi } from "./ai-router.js";
 import { callProvider, configuredProviders } from "./providers.js";
 import { CALL_CAPS, compactInput, createBudget, decideGear, excerpt } from "./budget.js";
 
@@ -23,7 +24,8 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   if (!available.length) { if (ownBudget) budget.close(); throw Object.assign(new Error("AI providers unavailable."), { unavailable: true }); }
   const input = compactInput(SYSTEM + "\n" + systemContext, messages);
   const original = excerpt(latest(input.messages), 6000);
-  const domain = requestDomain(original);
+  const routing = await classifyWithCheapAi(original, { budget, available });
+  const domain = routing.domain;
   let last = null;
   let stageFailures = 0;
   let fallbackUsed = false;
@@ -97,7 +99,7 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
     return {
       reply: last.text, provider: last.provider, model: last.model, requestId: last.requestId, fallbackUsed,
       trace: trace.map(e => ({ ...e, fallbackFrom: null })), usage: aggregateUsage(trace),
-      orchestration: { mode, level, domain, independentFamilies: new Set(successful.map(r => modelFamily({ provider: r.providerId }))).size > 1, calls: budget.calls, maxCalls: budget.maxCalls,
+      orchestration: { mode, level, domain, aiRouting: { source:routing.source, model:routing.model }, independentFamilies: new Set(successful.map(r => modelFamily({ provider: r.providerId }))).size > 1, calls: budget.calls, maxCalls: budget.maxCalls,
         multiProvider: new Set(successful.map(r => r.providerId)).size > 1,
         degraded: stageFailures > 0 || (level === "compound" && !trace.some(e => e.role === "finisher" && e.outcome === "completed")) ||
           (level === "compound_plus" && !trace.some(e => e.role === "critic" && e.outcome === "completed")) ||
