@@ -554,7 +554,7 @@ export default async function handler(req, res) {
     if (account?.olympus_entitled === true) mode = "olympus";
   }
   const gear = isImage ? "compound" : decideGear(mode, effectiveMessages);
-  const maxCalls = isImage ? 1 : Math.max(CALL_CAPS[gear], webSearchIntent(latestUser) ? 2 : 1) + 1; // one counted economy AI router call
+  const maxCalls = isImage ? 1 : Math.max(CALL_CAPS[gear], webSearchIntent(latestUser) ? 2 : 1) + 1 + (gear === "simple" ? 1 : 0); // counted router plus one bounded Simple failover attempt
   const requestId = parsed.data.requestId || crypto.randomUUID();
   const fingerprint = createHash("sha256").update(JSON.stringify({ mode, projectContext, conversationId, messages })).digest("hex");
   let budgetClient, quota;

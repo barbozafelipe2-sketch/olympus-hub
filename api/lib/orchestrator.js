@@ -52,7 +52,7 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   }
   try {
     if (level === "simple") {
-      await run("lead", input.system, input.messages);
+      await run("lead", input.system, input.messages, { attempts: 2 }); // second provider only on first-provider failure
     } else if (level === "compound") {
       const author = await run("author", input.system, input.messages, { attempts: 2 });
       if (budget.canCall()) {
