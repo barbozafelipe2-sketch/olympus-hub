@@ -332,6 +332,7 @@ export async function callProvider(
     maxOutputTokens = 4096,
     timeoutMs = 28_000,
     tier = "economy",
+    model: selectedModel = null,
     budget = null,
     role = "model"
   }
@@ -346,7 +347,8 @@ export async function callProvider(
   const input = compactInput(system, messages);
   system = input.system; messages = input.messages;
   maxOutputTokens = Math.min(MAX_OUTPUT_TOKENS, maxOutputTokens);
-  const model = modelFor(provider, tier);
+  if (selectedModel && ![modelFor(provider, "economy"), modelFor(provider, "premium")].includes(selectedModel)) throw Object.assign(new Error("Executor model is not configured."), { code: "EXECUTOR_MODEL_DENIED", status: 400 });
+  const model = selectedModel || modelFor(provider, tier);
   const event = budget?.reserve(role, provider, model, system.length + messages.reduce((n,m)=>n+m.content.length,0), maxOutputTokens);
   timeoutMs = Math.max(1, Math.min(timeoutMs, budget ? budget.remaining() - 5000 : timeoutMs));
   const signal = budget?.signal;

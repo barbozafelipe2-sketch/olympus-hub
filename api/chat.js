@@ -1,8 +1,8 @@
 import { selectRecentHistory } from "./lib/history.js";
 import { savePhaseCheckpoint } from "./lib/phase-checkpoints.js";
-import { decideCommercialEngine } from "./lib/commercial-routing-policy.js";
+import { classifyWithCheapAi, executionCatalog, validateExecutionRoute } from "./lib/ai-router.js";
 import { createHash } from "node:crypto";
-import { CALL_CAPS, compactInput, createBudget, decideGear, automaticOlympusEligible, evidenceContext } from "./lib/budget.js";
+import { CALL_CAPS, compactInput, createBudget, decideGear, evidenceContext } from "./lib/budget.js";
 import { makeBudgetClient, reserveQuota, settleQuota } from "./lib/quota.js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -548,15 +548,13 @@ export default async function handler(req, res) {
   const latestUser = [...effectiveMessages].reverse().find(m => m.role === "user")?.content || "";
   const isImage = imageGenerationIntent(latestUser);
   if (isImage) mode = "zeus";
-  if (!isImage && requestedMode === "zeus" && olympusAuto && automaticOlympusEligible(effectiveMessages)) {
-    const { data: account, error: accountError } = await auth.client.from("account_limits").select("olympus_entitled").eq("user_id", auth.user.id).maybeSingle();
-    if (accountError) return res.status(503).json({ error: "Unable to check Olympus authorization. Try again." });
-    if (account?.olympus_entitled === true) mode = "olympus";
-  }
-  const gear = isImage ? "compound" : decideGear(mode, effectiveMessages);
-  const maxCalls = isImage ? 1 : Math.max(CALL_CAPS[gear], webSearchIntent(latestUser) ? 2 : 1) + 1 + (gear === "simple" ? 1 : 0); // counted router plus one bounded Simple failover attempt
+  let gear = isImage ? "compound" : decideGear(mode, effectiveMessages);
+  const hasWeb = !isImage && webSearchIntent(latestUser);
+  // Admit a bounded maximum BEFORE paying the classifier; then narrow the execution cap.
+  // Auto Olympus reserves the team allowance, but SQL-issued entitlement still gates its use.
+  const maxCalls = isImage ? 1 : (requestedMode === "olympus" || olympusAuto ? 5 : 3) + (hasWeb ? 1 : 0);
   const requestId = parsed.data.requestId || crypto.randomUUID();
-  const fingerprint = createHash("sha256").update(JSON.stringify({ mode, projectContext, conversationId, messages })).digest("hex");
+  const fingerprint = createHash("sha256").update(JSON.stringify({ mode, olympusAuto, projectContext, conversationId, messages })).digest("hex");
   let budgetClient, quota;
   try {
     budgetClient = makeBudgetClient();
@@ -572,14 +570,23 @@ export default async function handler(req, res) {
       code: quota?.reason, quota
     });
   }
-  const commercialDecision = decideCommercialEngine({ activation: olympusAuto && requestedMode === "zeus" && !isImage ? "automatic" : "manual", manualOlympus: mode === "olympus", olympusEntitled: quota.olympusEntitled === true, allowanceAvailable: true, complexity: mode === "olympus" ? "complex" : "simple", needsReview: gear !== "simple" });
+  let executionRoute = null;
+  let commercialDecision = { engine: mode, reason: isImage ? "image_level_two" : "manual" };
   const startedAt = Date.now();
   const budget = createBudget({ maxCalls, startedAt });
-  budget.aiRouterReserved = !isImage; // quota admission already includes this extra metered call
   let imageCapability = { traces: [], artifact: null };
   let fileCapability = { context: "", traces: [] };
   let webCapability = { context: "", traces: [], sources: [] };
   try {
+  if (!isImage) {
+    const catalog = executionCatalog();
+    const recommendation = await classifyWithCheapAi(latestUser, { budget, catalog, requestedMode, olympusAuto,
+      history: effectiveMessages.slice(0, -1), context: canonicalContext?.project?.goal || "" });
+    executionRoute = validateExecutionRoute(recommendation, { catalog, requestedMode, olympusAuto, olympusEntitled: quota.olympusEntitled === true });
+    mode = executionRoute.mode; gear = executionRoute.gear;
+    budget.maxCalls = Math.min(maxCalls, budget.calls + CALL_CAPS[gear] + (hasWeb ? 1 : 0) + (gear === "simple" ? 1 : 0));
+    commercialDecision = { engine: mode, reason: executionRoute.source === "ai" ? "ai_complexity" : "rules_fallback" };
+  }
   if (canonicalContext) {
     try {
       canonicalContext = await refreshConversationCheckpoint(
@@ -659,7 +666,7 @@ export default async function handler(req, res) {
           mode: commercialDecision.engine,
           messages: effectiveMessages,
           systemContext: evidenceContext({ project: buildProjectSystemContext(canonicalContext), files: fileCapability.context, web: webCapability.context }),
-          budget, gear,
+          budget, gear, route: executionRoute,
           onStage: executionContext?.conversation?.id ? ({ stage, result }) => savePhaseCheckpoint(budgetClient, { ownerId: auth.user.id, requestId, conversationId: executionContext.conversation.id, stage, result }) : null
         });
 
@@ -683,8 +690,12 @@ export default async function handler(req, res) {
     );
     const orchestration = {
       ...result.orchestration,
-      routing: { requestedMode, olympusAuto, reason: commercialDecision.reason, router: result.orchestration?.aiRouting?.source === "ai" ? "economy_ai" : "rules_fallback" },
-      calls: budget.calls, maxCalls, level: result.orchestration.level || gear,
+      routing: { requestedMode, olympusAuto, reason: commercialDecision.reason, router: executionRoute?.source === "ai" ? "economy_ai" : isImage ? "image_capability" : "rules_fallback",
+        taskType: executionRoute?.taskType || "image", complexity: executionRoute?.complexity || "moderate", level: executionRoute?.level || 2,
+        recommendedLevel: executionRoute?.level ? (executionRoute.recommendedLevel || executionRoute.level) : 2,
+        executor: executionRoute?.executor ? { provider: executionRoute.executor.provider, model: executionRoute.executor.model, tier: executionRoute.executor.tier } : null,
+        restrictions: executionRoute?.restrictions || [], fallbackReason: executionRoute?.fallbackReason || null },
+      calls: budget.calls, maxCalls: budget.maxCalls, reservedMaxCalls: maxCalls, level: result.orchestration.level || gear,
       degraded: result.orchestration.degraded || capabilityDegraded
     };
 

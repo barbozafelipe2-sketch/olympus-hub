@@ -14,7 +14,7 @@ assert.equal(decideCommercialEngine({activation:'manual',manualOlympus:false,com
 // Exercise authorization and effective engine at the real API budget boundary.
 import test from 'node:test';
 import handler from '../api/chat.js';
-test('automatic mode checks server entitlement before reserving Olympus spend', async () => {
+test('budget rejection blocks classification regardless of automatic mode', async () => {
   const names=['SUPABASE_URL','SUPABASE_PUBLISHABLE_KEY','SUPABASE_SECRET_KEY'];
   const saved=Object.fromEntries(names.map(k=>[k,process.env[k]]));
   const original=globalThis.fetch;
@@ -34,9 +34,9 @@ test('automatic mode checks server entitlement before reserving Olympus spend', 
   };
   try {
     assert.equal((await invoke(false)).code,429);assert.equal(accountReads,0);assert.equal(reservedMode,'zeus');
-    assert.equal((await invoke(true)).code,429);assert.equal(accountReads,1);assert.equal(reservedMode,'zeus');
+    assert.equal((await invoke(true)).code,429);assert.equal(accountReads,0);assert.equal(reservedMode,'zeus');
     entitled=true;
-    assert.equal((await invoke(true)).code,429);assert.equal(reservedMode,'olympus');
+    assert.equal((await invoke(true)).code,429);assert.equal(reservedMode,'zeus');
     assert.equal((await invoke(true,'zeus','Olá')).code,429);assert.equal(reservedMode,'zeus');
     assert.equal((await invoke(false,'olympus')).code,429);assert.equal(reservedMode,'olympus');
     assert.equal((await invoke('true')).code,400);

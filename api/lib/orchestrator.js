@@ -1,5 +1,4 @@
 import { orderProviders, requestDomain, modelFamily } from "./model-routing.js";
-import { classifyWithCheapAi } from "./ai-router.js";
 import { callProvider, configuredProviders } from "./providers.js";
 import { CALL_CAPS, compactInput, createBudget, decideGear, excerpt } from "./budget.js";
 
@@ -15,7 +14,7 @@ export function aggregateUsage(trace = []) {
 
 function terminal(error) { return error?.code === "CHECKPOINT_PERSISTENCE_FAILED" || [400, 401, 402, 403, 413, 422].includes(Number(error?.status)); }
 
-export async function executeMode({ mode, systemContext = "", messages, budget = null, gear = null, onStage = null }) {
+export async function executeMode({ mode, systemContext = "", messages, budget = null, gear = null, route = null, onStage = null }) {
   if (!["zeus", "olympus"].includes(mode)) throw new Error("Unsupported OlyHub mode.");
   const available = configuredProviders();
   const level = mode === "olympus" && available.length < 2 ? "simple" : gear || decideGear(mode, messages);
@@ -24,21 +23,21 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   if (!available.length) { if (ownBudget) budget.close(); throw Object.assign(new Error("AI providers unavailable."), { unavailable: true }); }
   const input = compactInput(SYSTEM + "\n" + systemContext, messages);
   const original = excerpt(latest(input.messages), 6000);
-  const routing = budget.aiRouterReserved
-    ? await classifyWithCheapAi(original, { budget, available })
-    : {domain:requestDomain(original),source:"rules_fallback",model:null}; // preserve fixed legacy caps
+  const routing = route || { domain: requestDomain(original), source: "rules_fallback", model: null };
   const domain = routing.domain;
   let last = null;
   let stageFailures = 0;
   let fallbackUsed = false;
   const successful = [];
   async function run(role, system, turns, { excluded = [], tier = "economy", attempts = 1, stageDomain = domain } = {}) {
+    const primary = route?.executor && ["lead", "author", "specialist-1"].includes(role) ? route.executor : null;
     const candidates = orderProviders(available, { role, domain: stageDomain, excluded });
+    if (primary && candidates.includes(primary.provider)) candidates.splice(0, 0, ...candidates.splice(candidates.indexOf(primary.provider), 1));
     let error;
     for (const provider of candidates.slice(0, attempts)) {
       if (!budget.canCall()) break;
       try {
-        const result = await callProvider(provider, { system, messages: turns, budget, role, tier, maxOutputTokens: 4096, timeoutMs: 25000 });
+        const result = await callProvider(provider, { system, messages: turns, budget, role, tier: primary?.tier || tier, model: primary?.provider === provider ? primary.model : null, maxOutputTokens: 4096, timeoutMs: 25000 });
         last = result; successful.push(result);
         if (onStage) await onStage({ stage: role, result });
         fallbackUsed ||= Boolean(error);
