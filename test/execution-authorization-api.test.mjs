@@ -16,6 +16,7 @@ test('API aborts paid inference on refused/revoked/unavailable authorization and
    if(storageFailure)return Response.json({message:'fixture outage'},{status:500});
    return Response.json(permits.length===deny?{allowed:false,reason:'account_not_active'}:{allowed:true,attemptId:body.p_event.attemptId});
   }
+  if(path.includes('complete_ai_response'))return Response.json(JSON.parse(init.body).p_response);
   if(path.includes('settle_ai_budget')){settled=body;return Response.json(true);}
   if(path.includes('/rest/v1/'))return Response.json({id:crypto.randomUUID()},{status:201});
   if(path==='https://openrouter.ai/api/v1/models')return Response.json(feedFixture());

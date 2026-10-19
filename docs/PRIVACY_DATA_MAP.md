@@ -49,3 +49,7 @@ This is a static repository inspection. It does not inspect live Supabase projec
 ## Commercial engine adaptation
 
 `ai_stage_checkpoints` stores private intermediate model drafts under the authenticated owner and conversation. Conversation deletion removes these drafts. `ai_budget_requests` stores attempt metadata and quota debits independently of conversation content, so deleting a chat does not reset usage. Complete account deletion removes both through the account-owner foreign key. No prompt or draft text is stored in the financial trace.
+
+## 2026-10-19 provider/billing additions
+
+OpenRouter receives the relevant prompt/context and routes it to the configured underlying model vendor. Gemini/OpenAI may receive the same relevant context on a metered fallback. RevenueCat processes the app user UUID and Apple subscription/purchase information to verify entitlements; provider API keys and RevenueCat server secrets remain server-side. Native AI consent version 2026-10-19-v2 names the new AI transport. Final response cache and stage content are deleted with their conversation/account; the financial ledger retains usage/cost accounting without final-response text. Update public legal policies and App Store disclosures before release.

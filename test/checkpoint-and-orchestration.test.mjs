@@ -103,12 +103,12 @@ test("fallback attempts consume the Compound cap and remain in the trace", async
     return new Response(JSON.stringify({output:[{content:[{type:"output_text",text:"Recovered"}]}],usage:{input_tokens:4,output_tokens:6}}),{status:200});
   };
   try {
-    const result=await executeMode({mode:"zeus",budget:fixtureBudget({maxCalls:2}),systemContext:"",messages:[{role:"user",content:"Fix this bug"}]});
-    assert.equal(calls,2);assert.equal(result.orchestration.calls,2);
-    assert.equal(result.trace.length,2);
-    assert.equal(result.trace[0].outcome,"failed");assert.equal(result.trace[1].outcome,"completed");
-    assert.equal(result.fallbackUsed,true);
-    assert.equal(result.orchestration.degraded,true);
+    const budget=fixtureBudget({maxCalls:2});
+    try {
+      await assert.rejects(()=>executeMode({mode:"zeus",budget,systemContext:"",messages:[{role:"user",content:"Fix this bug"}]}),e=>e.code==='REVIEW_UNAVAILABLE');
+      assert.equal(calls,2);assert.equal(budget.calls,2);
+      assert.equal(budget.events[0].outcome,"failed");assert.equal(budget.events[1].outcome,"completed");
+    }finally{budget.close();}
   } finally {
     globalThis.fetch=previousFetch;__resetProviderHealthForTests();
     for(const [k,v] of Object.entries(prev)){if(v==null)delete process.env[k];else process.env[k]=v;}

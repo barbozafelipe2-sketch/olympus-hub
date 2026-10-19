@@ -1,3 +1,4 @@
+import { imageRoutes, generateWorkflowImage } from './image-workflow.js';
 import { authorizationFailure } from "./execution-policy.js";
 import { redactSecrets } from "./budget.js";
 const READABLE_MIME_TYPES = new Set([
@@ -311,24 +312,9 @@ export async function runImageGenerationCapability({
     };
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return {
-      context:
-        "\n\nThe user asked OlyHub to generate an image, but the image capability is not configured. Do not claim an image was created.",
-      traces: [
-        {
-          name: "generate_image",
-          status: "failed",
-          reason: "OpenAI image capability is not configured."
-        }
-      ],
-      artifact: null
-    };
-  }
-
-  const routerModel = process.env.OPENAI_IMAGE_ROUTER_MODEL || "gpt-5.5";
-  const imageModel =
-    process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-flare";
+  const route = imageRoutes()[0];
+  if(!route) return {context:'',traces:[{name:'generate_image',status:'failed',reason:'No image model configured.'}],artifact:null};
+  const imageModel=route.model;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(1, Math.min(65000, budget ? budget.remaining() - 5000 : 65000)));
   let event = null;
@@ -338,55 +324,12 @@ export async function runImageGenerationCapability({
 
   try {
     if (!budget?.reserveAuthorized) throw Object.assign(new Error("Reserved budget required."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
-    event = await budget.reserveAuthorized("capability:generate_image", "openai", routerModel + " + " + imageModel, 24000, 4096, { tier: "capability", inputBytes: Buffer.byteLength(userText) + 4096 });
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + process.env.OPENAI_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: routerModel,
-        max_output_tokens: 4096,
-        input: userText,
-        tools: [
-          {
-            type: "image_generation",
-            model: imageModel,
-            action: "generate"
-          }
-        ],
-        tool_choice: {
-          type: "image_generation"
-        }
-      }),
-      signal: budget ? AbortSignal.any([controller.signal, budget.signal]) : controller.signal
-    });
-
-    const data = await response.json().catch(() => null);
-    if (event) budget.complete(event, { usage: openAIWebUsage(data), requestId: data?.id }, response.ok ? null : { status: response.status });
-    const requestId =
-      response.headers.get("x-request-id") ||
-      data?.id ||
-      crypto.randomUUID();
-
-    if (!response.ok) {
-      throw Object.assign(new Error("Image generation request failed."), {
-        requestId,
-        status: response.status
-      });
-    }
-
-    const imageCall = imageCallFromResponse(data);
-    if (!imageCall) {
-      throw new Error("Image generation returned no image.");
-    }
-
-    const imageBytes = Buffer.from(imageCall.result, "base64");
-    if (imageBytes.length === 0 || imageBytes.length > 20 * 1024 * 1024) {
-      throw new Error("Generated image size is outside OlyHub limits.");
-    }
-
+    event = await budget.reserveAuthorized('capability:generate_image',route.provider,route.model,Math.min(24000,userText.length),4096,{tier:'capability',inputBytes:Buffer.byteLength(userText)});
+    const generated=await generateWorkflowImage({route,prompt:userText,signal:AbortSignal.any([controller.signal,budget.signal])});
+    const usage=generated.usage ? {reported:Number.isSafeInteger(generated.usage.total_tokens),totalTokens:generated.usage.total_tokens} : null;
+    const requestId=event.attemptId;
+    budget.complete(event,{usage,requestId});
+    const imageBytes=generated.bytes;
     const scopeName =
       context.project?.name || context.conversation?.title || "OlyHub chat";
     const title = artifactTitle(userText, scopeName, "image");
@@ -398,11 +341,11 @@ export async function runImageGenerationCapability({
         p_conversation_id: context.conversation.id,
         p_title: title,
         p_kind: "image",
-        p_mime_type: "image/png",
+        p_mime_type: generated.mimeType,
         p_content:
           "Generated image prompt:\n" +
-          (imageCall.revised_prompt || userText).slice(0, 30000),
-        p_provider: "OpenAI",
+          userText.slice(0, 30000),
+        p_provider: route.provider,
         p_model: imageModel,
         p_request_id: requestId
       }
@@ -427,7 +370,7 @@ export async function runImageGenerationCapability({
     const { error: uploadError } = await client.storage
       .from("artifact-files")
       .upload(storagePath, imageBytes, {
-        contentType: "image/png",
+        contentType: generated.mimeType,
         cacheControl: "3600",
         upsert: false
       });
@@ -441,7 +384,7 @@ export async function runImageGenerationCapability({
         owner_id: ownerId,
         version: created.version,
         storage_path: storagePath,
-        mime_type: "image/png",
+        mime_type: generated.mimeType,
         size_bytes: imageBytes.length
       });
 
@@ -455,7 +398,7 @@ export async function runImageGenerationCapability({
       id: artifactId,
       title,
       kind: "image",
-      mimeType: "image/png",
+      mimeType: generated.mimeType,
       version: created.version,
       action: "created",
       previewUrl: signed?.signedUrl || null
@@ -473,11 +416,11 @@ export async function runImageGenerationCapability({
           target: title,
           artifactId,
           version: created.version,
-          provider: "OpenAI",
-          providerId: "openai",
-          model: routerModel + " + " + imageModel,
+          provider: route.provider,
+          providerId: route.provider,
+          model: imageModel,
           requestId,
-          usage: openAIWebUsage(data)
+          usage
         }
       ],
       artifact

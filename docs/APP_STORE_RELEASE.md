@@ -177,3 +177,7 @@ Close. The two-user RLS isolation harness exists but still needs staging credent
 
 ### Apple App Store
 Native code and EAS build profiles exist, but no signed iOS binary has been built or device-tested yet. The app is **not ready to submit** until the Apple team/bundle ID, privacy manifest, production legal metadata, business-model/IAP decision, store assets, EAS secrets, native E2E and signed device QA are complete.
+
+## Commercial engine update (2026-10-19)
+
+Purchase/restore UI, verified server subscription synchronization, image comparison and response recovery are implemented. Current production dependencies and validation limits are tracked in [COMMERCIAL_ACTIVATION.md](COMMERCIAL_ACTIVATION.md). Apple Developer enrollment is not the only remaining external dependency.

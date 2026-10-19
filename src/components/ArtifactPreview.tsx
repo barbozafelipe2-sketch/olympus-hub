@@ -1,3 +1,4 @@
+import { ImageWorkflow } from "./ImageWorkflow";
 import { useEffect, useState } from "react";
 import {
   getArtifactPreviewUrl,
@@ -37,6 +38,7 @@ export function ArtifactPreview({ artifact }: Props) {
   if (!url) return null;
 
   return (
+    <>
     <a
       className="artifact-preview"
       href={url}
@@ -46,5 +48,7 @@ export function ArtifactPreview({ artifact }: Props) {
     >
       <img src={url} alt={artifact.title} loading="lazy" />
     </a>
+    <ImageWorkflow artifactId={artifact.id}/>
+    </>
   );
 }

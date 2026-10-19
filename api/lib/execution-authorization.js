@@ -1,3 +1,4 @@
+import { estimateCost } from './model-pricing.js';
 import { assertModelAttempt, authorizationFailure } from './execution-policy.js';
 export { authorizationFailure };
 function denied(reason, unavailable = false) {
@@ -5,7 +6,7 @@ function denied(reason, unavailable = false) {
     code: unavailable ? 'AI_AUTHORIZATION_UNAVAILABLE' : 'AI_AUTHORIZATION_DENIED', status: unavailable ? 503 : 403, reason
   });
 }
-export function createExecutionAuthorization({ client, ownerId, requestId, quota, requestedMode, isImage, hasWeb }) {
+export function createExecutionAuthorization({ client, ownerId, requestId, quota, requestedMode, isImage, hasWeb, imageRoute = null }) {
   const policy = quota?.authorizationPolicy;
   if (quota?.allowed !== true || !policy || !Number.isInteger(policy.maxLevel) || policy.maxLevel < 1 || policy.maxLevel > 4
     || !Array.isArray(policy.allowedTiers) || !policy.allowedTiers.length || policy.allowedTiers.some(t => !['economy','premium'].includes(t))
@@ -37,8 +38,8 @@ export function createExecutionAuthorization({ client, ownerId, requestId, quota
     async authorizeAttempt(event) {
       try {
         if (event.role === 'capability:generate_image') {
-          const expected = (process.env.OPENAI_IMAGE_ROUTER_MODEL || 'gpt-5.5') + ' + ' + (process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare');
-          if (phase !== 'image' || event.provider !== 'openai' || event.model !== expected || event.tier !== 'capability') throw Error('image_model_not_allowed');
+          const expected = imageRoute?.model || (process.env.OPENAI_IMAGE_ROUTER_MODEL || 'gpt-5.5') + ' + ' + (process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare');
+          if (phase !== 'image' || event.provider !== (imageRoute?.provider || 'openai') || event.model !== expected || event.tier !== 'capability') throw Error('image_model_not_allowed');
         } else if (event.role === 'capability:web_search') {
           if (phase !== 'execution' || !hasWeb || !admittedPolicy.allowWeb || event.provider !== 'openai' || event.model !== (process.env.OPENAI_WEB_SEARCH_MODEL || 'gpt-5.5') || event.tier !== 'capability') throw Error('web_model_not_allowed');
         } else {
@@ -48,8 +49,14 @@ export function createExecutionAuthorization({ client, ownerId, requestId, quota
           assertModelAttempt(model,event,route);
         }
       } catch (error) { throw denied(error.message); }
+      const price = event.role.startsWith('capability:') ? null : catalog.find(m=>m.provider===event.provider && m.model===event.model && m.tier===event.tier)?.price;
+      const cost = price ? estimateCost(price,{inputTokens:event.inputBytes+1024,outputTokens:event.outputTokens}) * 1.25
+        : Number(event.role==='capability:generate_image' ? imageRoute?.estimatedUsd : process.env.OLYHUB_WEB_MAX_COST_USD);
+      if(!Number.isFinite(cost)||cost<=0 && !price)throw denied('capability_price_missing');
+      const estimatedMicrousd=Math.max(1,Math.ceil(cost*1000000));
+      if(!Number.isSafeInteger(estimatedMicrousd))throw denied('invalid_cost_estimate');
       const result = await rpc('authorize_ai_attempt', { p_event: { attemptId: event.attemptId, role: event.role, provider: event.provider,
-        model: event.model, tier: event.tier, mode, inputChars: event.inputChars, outputTokens: event.outputTokens } });
+        model: event.model, tier: event.tier, mode, estimatedMicrousd, inputChars: event.inputChars, outputTokens: event.outputTokens } });
       if (result.attemptId !== event.attemptId) throw denied('authorization_receipt_mismatch',true);
       // A slow permit RPC must not extend a quote beyond its local validity window.
       if (!event.role.startsWith('capability:')) {

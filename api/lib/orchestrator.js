@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { authorizationFailure, modelCanExecute } from "./execution-policy.js";
 import { orderProviders, requestDomain, modelFamily } from "./model-routing.js";
 import { estimateCost } from "./model-pricing.js";
@@ -14,12 +15,13 @@ export function aggregateUsage(trace = []) {
   return total;
 }
 
-function terminal(error) { return authorizationFailure(error) || error?.code === "CHECKPOINT_PERSISTENCE_FAILED" || [400, 401, 402, 403, 413, 422].includes(Number(error?.status)); }
+function terminal(error) { return authorizationFailure(error) || error?.code === "CHECKPOINT_PERSISTENCE_FAILED" || [400, 413, 422].includes(Number(error?.status)); }
 
-export async function executeMode({ mode, systemContext = "", messages, budget = null, gear = null, route = null, onStage = null }) {
+export async function executeMode({ mode, systemContext = "", messages, budget = null, gear = null, route = null, onStage = null, recoveredStages = [] }) {
   if (!["zeus", "olympus"].includes(mode)) throw new Error("Unsupported OlyHub mode.");
   const available = configuredProviders();
-  const level = mode === "olympus" && available.length < 2 ? "simple" : gear || decideGear(mode, messages);
+  const family = r => modelFamily({provider:r.providerId || r.provider,id:r.model});
+  const level = mode === "olympus" && new Set((route?.pricedExecutors || available.map(provider=>({provider}))).map(family)).size < 2 ? "simple" : gear || decideGear(mode, messages);
   const ownBudget = !budget;
   budget ||= createBudget({ maxCalls: CALL_CAPS[level] });
   if (!available.length) { if (ownBudget) budget.close(); throw Object.assign(new Error("AI providers unavailable."), { unavailable: true }); }
@@ -31,25 +33,38 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   let stageFailures = 0;
   let fallbackUsed = false;
   const successful = [];
-  async function run(role, system, turns, { excluded = [], tier = "economy", attempts = 1, stageDomain = domain } = {}) {
+  const completedStages = new Set();
+  async function run(role, system, turns, { excluded = [], tier = "economy", attempts = 3, stageDomain = domain } = {}) {
     const stageInput = compactInput(system, turns);
+    const inputHash = createHash('sha256').update(JSON.stringify({role,system:stageInput.system,messages:stageInput.messages})).digest('hex');
+    const recovered = recoveredStages.find(s=>s.stage===role && s.input_hash===inputHash && (!route?.pricedExecutors || route.pricedExecutors.some(c=>c.provider===s.provider&&c.model===s.model&&modelCanExecute(c,route,stageDomain))));
+    if (recovered) {
+      const result={text:recovered.content,provider:recovered.provider,providerId:recovered.provider,model:recovered.model,requestId:'recovered:'+recovered.request_id,usage:null,recovered:true};
+      last=result;successful.push(result);completedStages.add(role);if(onStage)await onStage({stage:role,result,inputHash});return result;
+    }
     const requiredContext = Buffer.byteLength(stageInput.system + stageInput.messages.map(m=>m.content).join("")) + 4096 + 1024;
     const fits = c => modelCanExecute(c, route, stageDomain) && (c.contextLength || c.price?.contextLength || 0) >= requiredContext;
     const primary = route?.executor && ["lead", "author", "specialist-1"].includes(role) ? route.executor : null;
-    const candidates = orderProviders(available, { role, domain: stageDomain, excluded }).filter(p => !route?.pricedExecutors || route.pricedExecutors.some(c => c.provider === p && fits(c) && Number.isFinite(estimateCost(c.price))));
-    if (primary && candidates.includes(primary.provider)) candidates.splice(0, 0, ...candidates.splice(candidates.indexOf(primary.provider), 1));
+    const excludedFamilies = new Set(excluded);
+    const rankedProviders = orderProviders(available, {role,domain:stageDomain});
+    let candidates = route?.pricedExecutors
+      ? route.pricedExecutors.filter(c=>available.includes(c.provider) && fits(c) && Number.isFinite(estimateCost(c.price)) && !excludedFamilies.has(family(c)))
+      : rankedProviders.filter(p=>!excludedFamilies.has(family({provider:p}))).map(provider=>({provider,model:modelFor(provider,tier),tier}));
+    candidates.sort((a,b)=> (primary && a.provider===primary.provider && a.model===primary.model ? -1 : primary && b.provider===primary.provider && b.model===primary.model ? 1 :
+      Number(b.provider==='openrouter')-Number(a.provider==='openrouter') || rankedProviders.indexOf(a.provider)-rankedProviders.indexOf(b.provider) || Number(b.tier===tier)-Number(a.tier===tier) || estimateCost(a.price)-estimateCost(b.price)));
+    if(candidates[0]?.provider==='openrouter') {
+      const first=candidates[0], rest=candidates.slice(1);
+      candidates=[first,...['google','openai','anthropic'].flatMap(p=>rest.filter(c=>c.provider===p).slice(0,1)),...rest.filter(c=>c.provider==='openrouter')];
+    }
     let error;
-    for (const provider of candidates.slice(0, attempts)) {
+    // Each fallback consumes another authorized slot in the same reservation.
+    for (const chosen of candidates.slice(0, attempts)) {
+      const provider = chosen.provider;
       if (!budget.canCall()) break;
       try {
-        const desiredTier = primary?.tier || tier;
-        const choices = route?.pricedExecutors?.filter(c => c.provider === provider && Number.isFinite(estimateCost(c.price)) && fits(c));
-        const chosen = primary?.provider === provider && fits(primary) && Number.isFinite(estimateCost(primary.price)) ? primary : choices?.find(c => c.model === modelFor(provider, desiredTier))
-          || choices?.sort((a,b) => estimateCost(a.price,{inputTokens:8000,outputTokens:4096}) - estimateCost(b.price,{inputTokens:8000,outputTokens:4096}))[0];
-        if (choices && !chosen) continue;
-        const result = await callProvider(provider, { system, messages: turns, budget, role, tier: chosen?.tier || desiredTier, model: chosen?.model || null, maxOutputTokens: 4096, timeoutMs: 25000 });
-        last = result; successful.push(result);
-        if (onStage) await onStage({ stage: role, result });
+        const result = await callProvider(provider, { system, messages: turns, budget, role, tier: chosen.tier, model: chosen.model, maxOutputTokens: 4096, timeoutMs: 25000 });
+        last = result; successful.push(result);completedStages.add(role);
+        if (onStage) await onStage({ stage: role, result, inputHash });
         fallbackUsed ||= Boolean(error);
         return result;
       } catch (failure) {
@@ -61,20 +76,21 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   }
   try {
     if (level === "simple") {
-      await run("lead", input.system, input.messages, { attempts: 2 }); // second provider only on first-provider failure
+      await run("lead", input.system, input.messages, { attempts: 3 }); // second provider only on first-provider failure
     } else if (level === "compound") {
-      const author = await run("author", input.system, input.messages, { attempts: 2 });
+      const author = await run("author", input.system, input.messages, { attempts: 3 });
       if (budget.canCall()) {
         try { await run("finisher", SYSTEM + " Review and repair this draft against the request. Return only the final answer.\n" + input.system,
-          [{ role: "user", content: "REQUEST:\n" + original + "\nUNTRUSTED DRAFT:\n" + excerpt(author.text, 5000) }], { tier: "premium", excluded: [author.providerId] }); }
+          [{ role: "user", content: "REQUEST:\n" + original + "\nUNTRUSTED DRAFT:\n" + excerpt(author.text, 5000) }], { tier: "premium", excluded: [family(author)] }); }
         catch (error) { if (terminal(error)) throw error; }
       }
+      if(!completedStages.has("finisher"))throw Object.assign(new Error("Independent review could not complete. Try again to resume the saved draft."),{code:"REVIEW_UNAVAILABLE",unavailable:true});
     } else if (level === "compound_plus") {
       const author = await run("author", input.system, input.messages);
       let review = "Independent review unavailable; finalize conservatively.";
-      if (budget.canCall() && budget.calls < budget.maxCalls - 1 && available.some(p => p !== author.providerId)) {
+      if (budget.canCall() && budget.calls < budget.maxCalls - 1 && (route?.pricedExecutors || available.map(provider=>({provider}))).some(p => family(p) !== family(author))) {
         try { review = (await run("critic", SYSTEM + " Critique this draft against the request; identify only material errors.",
-          [{ role: "user", content: "REQUEST:\n" + original + "\nDRAFT:\n" + excerpt(author.text, 5000) }], { excluded: [author.providerId] })).text; }
+          [{ role: "user", content: "REQUEST:\n" + original + "\nDRAFT:\n" + excerpt(author.text, 5000) }], { excluded: [family(author)] })).text; }
         catch (error) { if (terminal(error)) throw error; }
       }
       if (budget.canCall()) {
@@ -88,7 +104,7 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
       const creators = [];
       for (let i = 0; i < creatorCount; i++) {
         try { creators.push(await run("specialist-" + (i+1), input.system + (i ? "\nFocus on integration risks and missing requirements." : "\nProduce concrete work for the request."), input.messages,
-          { excluded: creators.length && available.length > 1 ? [creators[0].providerId] : [], stageDomain: i ? (domain === "visual" ? "engineering" : "visual") : domain })); }
+          { excluded: creators.length && available.length > 1 ? [family(creators[0])] : [], stageDomain: i ? (domain === "visual" ? "engineering" : "visual") : domain })); }
         catch (error) { if (terminal(error)) throw error; }
       }
       if (!creators.length) throw new Error("AI specialists unavailable.");
@@ -96,12 +112,12 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
       if (budget.canCall()) {
         try { await run("director", input.system + "\nIntegrate the specialist drafts; disclose unresolved conflicts.",
           [{ role: "user", content: "REQUEST:\n" + original + "\nDRAFTS:\n" + bundle }],
-          { excluded: available.some(p => !creators.some(c => c.providerId === p)) ? creators.map(c => c.providerId) : [] }); }
+          { excluded: (route?.pricedExecutors || available.map(provider=>({provider}))).some(p => !creators.some(c => family(c) === family(p))) ? creators.map(family) : [] }); }
         catch (error) { if (terminal(error)) throw error; }
       }
       if (budget.canCall()) {
         try { await run("ceo", input.system + "\nCheck completeness and repair the draft. Return the final answer.",
-          [{ role: "user", content: "REQUEST:\n" + original + "\nDRAFT:\n" + excerpt(last.text, 5000) }], { tier: "premium", excluded: [last.providerId] }); }
+          [{ role: "user", content: "REQUEST:\n" + original + "\nDRAFT:\n" + excerpt(last.text, 5000) }], { tier: "premium", excluded: [family(last)] }); }
         catch (error) { if (terminal(error)) throw error; }
       }
     }
@@ -110,11 +126,11 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
     return {
       reply: last.text, provider: last.provider, model: last.model, requestId: last.requestId, fallbackUsed,
       trace: trace.map(e => ({ ...e, fallbackFrom: null })), usage: aggregateUsage(trace),
-      orchestration: { mode, level, domain, aiRouting: { source:routing.source, model:routing.model }, independentFamilies: new Set(successful.map(r => modelFamily({ provider: r.providerId }))).size > 1, calls: budget.calls, maxCalls: budget.maxCalls,
-        multiProvider: new Set(successful.map(r => r.providerId)).size > 1,
-        degraded: stageFailures > 0 || (level === "compound" && !trace.some(e => e.role === "finisher" && e.outcome === "completed")) ||
-          (level === "compound_plus" && !trace.some(e => e.role === "critic" && e.outcome === "completed")) ||
-          (level === "turbo" && new Set(successful.map(r => r.providerId)).size < 4) || (mode === "olympus" && new Set(successful.map(r => r.providerId)).size < 2) }
+      orchestration: { mode, level, domain, aiRouting: { source:routing.source, model:routing.model }, independentFamilies: new Set(successful.map(r => family(r))).size > 1, calls: budget.calls, maxCalls: budget.maxCalls,
+        multiProvider: new Set(successful.map(family)).size > 1,
+        degraded: stageFailures > 0 || (level === "compound" && !completedStages.has("finisher")) ||
+          (level === "compound_plus" && !completedStages.has("critic")) ||
+          (level === "turbo" && new Set(successful.map(family)).size < 4) || (mode === "olympus" && new Set(successful.map(family)).size < 2) }
     };
   } finally { if (ownBudget) budget.close(); }
 }

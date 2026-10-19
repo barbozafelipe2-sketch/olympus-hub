@@ -13,8 +13,10 @@
     "e2e:isolation": "node scripts/e2e-isolation.mjs"
   },
   "dependencies": {
+    "@google/genai": "1.29.0",
     "@supabase/supabase-js": "2.117.2",
     "lucide-react": "0.544.0",
+    "openai": "6.8.1",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "zod": "4.1.11"

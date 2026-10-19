@@ -1,3 +1,4 @@
+import { Subscriptions } from "../../src/components/Subscriptions";
 import { useState } from "react";
 import {
   Alert,
@@ -217,6 +218,7 @@ export default function SettingsScreen() {
             Delete account and data
           </Text>
         </Pressable>
+        <Subscriptions/>
         <Modal
           visible={deleteOpen}
           animationType="slide"

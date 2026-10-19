@@ -1,3 +1,4 @@
+import { imageRoutes } from './lib/image-workflow.js';
 import { createExecutionAuthorization } from "./lib/execution-authorization.js";
 import { selectRecentHistory } from "./lib/history.js";
 import { savePhaseCheckpoint } from "./lib/phase-checkpoints.js";
@@ -38,6 +39,7 @@ const BodySchema = z.object({
   mode: ModeSchema.default("zeus"),
   olympusAuto: z.boolean().default(false),
   requestId: z.string().uuid().optional(),
+  resumeRequestId: z.string().uuid().optional(),
   projectContext: ProjectContextSchema.optional(),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1).max(80)
@@ -556,9 +558,28 @@ export default async function handler(req, res) {
   const maxCalls = isImage ? 1 : (requestedMode === "olympus" || olympusAuto ? 5 : 3) + (hasWeb ? 1 : 0);
   const requestId = parsed.data.requestId || crypto.randomUUID();
   const fingerprint = createHash("sha256").update(JSON.stringify({ mode, olympusAuto, projectContext, conversationId, messages })).digest("hex");
-  let budgetClient, quota;
+  let budgetClient, quota, recoveredStages = [];
   try {
     budgetClient = makeBudgetClient();
+    // Only exact owner/request/fingerprint matches may replay. A lookup error blocks new spending.
+    const {data: prior,error: priorError}=await budgetClient.from('ai_budget_requests').select('fingerprint,state').eq('owner_id',auth.user.id).eq('request_id',requestId).maybeSingle();
+    if(priorError) throw Object.assign(new Error('Replay storage unavailable.'),{code:'REPLAY_UNAVAILABLE'});
+    if(prior && prior.fingerprint===fingerprint) {
+      const {data:cached,error:cacheError}=await budgetClient.from('ai_response_cache').select('response').eq('owner_id',auth.user.id).eq('request_id',requestId).maybeSingle();
+      if(cacheError)throw Object.assign(new Error('Replay unavailable.'),{code:'REPLAY_UNAVAILABLE'});
+      if(cached?.response)return res.status(200).json({...cached.response,replayed:true});
+    }
+    if(parsed.data.resumeRequestId && executionContext?.conversation?.id) {
+      const {data:parent,error:parentError}=await budgetClient.from('ai_budget_requests').select('fingerprint,state,expires_at').eq('owner_id',auth.user.id).eq('request_id',parsed.data.resumeRequestId).maybeSingle();
+      if(parent && parent.fingerprint===fingerprint && parent.state==='completed') {
+        const {data:cached,error:cacheError}=await budgetClient.from('ai_response_cache').select('response').eq('owner_id',auth.user.id).eq('request_id',parsed.data.resumeRequestId).maybeSingle();
+        if(!cacheError&&cached?.response)return res.status(200).json({...cached.response,replayed:true});
+      }
+      if(parentError || !parent || parent.fingerprint!==fingerprint || !(['failed','expired'].includes(parent.state) || parent.state==='running'&&Date.parse(parent.expires_at)<=Date.now())) return res.status(409).json({error:'This attempt cannot be resumed.',code:'RESUME_DENIED'});
+      const {data:stages,error:stageError}=await budgetClient.from('ai_stage_checkpoints').select('*').eq('owner_id',auth.user.id).eq('request_id',parsed.data.resumeRequestId).eq('conversation_id',executionContext.conversation.id);
+      if(stageError) throw Object.assign(new Error('Checkpoint storage unavailable.'),{code:'REPLAY_UNAVAILABLE'});
+      recoveredStages=stages||[];
+    }
     quota = await reserveQuota(budgetClient, { ownerId: auth.user.id, requestId, fingerprint, maxCalls, kind: isImage ? "image" : "text", mode, allowOlympus: !isImage && (requestedMode === "olympus" || olympusAuto), allowWeb: hasWeb });
   } catch (error) {
     console.error("Budget reservation unavailable", { code: error?.code });
@@ -575,7 +596,7 @@ export default async function handler(req, res) {
   let commercialDecision = { engine: mode, reason: isImage ? "image_level_two" : "manual" };
   const startedAt = Date.now();
   let authorization;
-  try { authorization = createExecutionAuthorization({ client: budgetClient, ownerId: auth.user.id, requestId, quota, requestedMode: mode, isImage, hasWeb }); }
+  try { authorization = createExecutionAuthorization({ client: budgetClient, ownerId: auth.user.id, requestId, quota, requestedMode: mode, isImage, hasWeb, imageRoute: isImage ? imageRoutes()[0] : null }); }
   catch {
     const unused = createBudget({ maxCalls });
     try { await settleQuota(budgetClient, { ownerId: auth.user.id, requestId, budget: unused, failed: true }); } catch { /* Retain admission if settlement cannot be confirmed. */ }
@@ -676,8 +697,8 @@ export default async function handler(req, res) {
           mode: commercialDecision.engine,
           messages: effectiveMessages,
           systemContext: evidenceContext({ project: buildProjectSystemContext(canonicalContext), files: fileCapability.context, web: webCapability.context }),
-          budget, gear, route: executionRoute,
-          onStage: executionContext?.conversation?.id ? ({ stage, result }) => savePhaseCheckpoint(budgetClient, { ownerId: auth.user.id, requestId, conversationId: executionContext.conversation.id, stage, result }) : null
+          budget, gear, route: executionRoute, recoveredStages,
+          onStage: executionContext?.conversation?.id ? ({ stage, result, inputHash }) => savePhaseCheckpoint(budgetClient, { ownerId: auth.user.id, requestId, conversationId: executionContext.conversation.id, stage, result, inputHash }) : null
         });
 
     const artifactCapability = imageAttempted
@@ -741,18 +762,17 @@ export default async function handler(req, res) {
       capabilities
     });
 
-    await settleQuota(budgetClient, { ownerId: auth.user.id, requestId, budget });
-    return res.status(200).json({
-      ...result,
-      usage,
-      orchestration,
-      executionId,
+    const response = {
+      ...result, usage, orchestration, executionId,
       artifact: imageCapability.artifact || artifactCapability.artifact,
-      capabilities,
-      sources: webCapability.sources,
-      quota,
-      usageRecorded
+      capabilities, sources: webCapability.sources, quota, usageRecorded
+    };
+    const {data: durableResponse,error: completionError}=await budgetClient.rpc('complete_ai_response',{
+      p_owner_id:auth.user.id,p_request_id:requestId,p_conversation_id:executionContext?.conversation?.id||null,
+      p_response:response,p_tokens:budget.chargedTokens(),p_trace:budget.events
     });
+    if(completionError || !durableResponse?.reply) throw Object.assign(new Error('Could not save final response.'),{code:'RESPONSE_PERSISTENCE_FAILED'});
+    return res.status(200).json(durableResponse);
   } catch (error) {
     const authorizationDenied = error?.code === "AI_AUTHORIZATION_DENIED";
     const authorizationUnavailable = String(error?.code || "").startsWith("AI_AUTHORIZATION_") && !authorizationDenied;

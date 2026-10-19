@@ -14,11 +14,13 @@ test('AI-selected level and exact executor reach the pipeline; permissions, budg
  let allowed=true,entitled=true,route,routerFailure=false,priceUnavailable=false,omitReviewerPrices=false,executionWrites=0,sent=[],settlements=[],reservations=[];
  globalThis.fetch=async (url,init={})=>{
   const path=String(url);
+  if(path.includes("/rest/v1/ai_budget_requests")||path.includes("/rest/v1/ai_response_cache"))return Response.json(null);
     if(path.includes('bind_ai_execution'))return Response.json({allowed:true});
     if(path.includes('authorize_ai_attempt'))return Response.json({allowed:true,attemptId:JSON.parse(init.body).p_event.attemptId});
     if(path === "https://openrouter.ai/api/v1/models")return Response.json(priceUnavailable?{data:[]}:omitReviewerPrices?{data:feedFixture().data.filter(m=>m.id.startsWith("openai/"))}:feedFixture());
   if(path.includes('auth/v1/user'))return Response.json({id:'11111111-1111-4111-8111-111111111111',aud:'authenticated'});
   if(path.includes('reserve_ai_budget')){reservations.push(JSON.parse(init.body));return Response.json({allowed,authorizationPolicy:admissionPolicy(),olympusEntitled:entitled,reason:allowed?null:'budget_limit'});}
+  if(path.includes('complete_ai_response')){const b=JSON.parse(init.body);settlements.push({p_trace:b.p_trace,p_charged_tokens:b.p_tokens});return Response.json(b.p_response);}
   if(path.includes('settle_ai_budget')){settlements.push(JSON.parse(init.body));return Response.json(true);}
   if(path.includes('/rest/v1/executions')){executionWrites++;return Response.json({id:crypto.randomUUID()},{status:201});}
   if(path.includes('/rest/v1/usage_events'))return Response.json(null,{status:201});
@@ -56,7 +58,7 @@ test('AI-selected level and exact executor reach the pipeline; permissions, budg
   r=await invoke({executorId:'arbitrary:unapproved'});assert.equal(r.code,200);assert.equal(r.body.orchestration.routing.router,'rules_fallback');assert.equal(sent.length,2);
   routerFailure=true;r=await invoke();assert.equal(r.code,200);assert.equal(sent.length,2);assert.equal(settlements[0].p_trace[0].outcome,'failed');assert.ok(settlements[0].p_charged_tokens>0);
   routerFailure=false;omitReviewerPrices=true;r=await invoke({executorId:'openai:economy'});
-  assert.equal(r.code,200);assert.equal(r.body.orchestration.degraded,true);assert.equal(sent.length,2);assert.ok(sent.every(c=>c.provider==='openai'));omitReviewerPrices=false;
+  assert.equal(r.code,503);assert.equal(sent.length,2);assert.ok(sent.every(c=>c.provider==='openai'));omitReviewerPrices=false;
   allowed=false;r=await invoke();assert.equal(r.code,429);assert.equal(sent.length,0);
   await assert.rejects(()=>callProvider('openai',{system:'test',messages:[{role:'user',content:'test'}],model:'unapproved-expensive-model'}),e=>e.code==='EXECUTOR_MODEL_DENIED');
   assert.equal(sent.length,0);

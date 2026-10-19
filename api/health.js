@@ -9,6 +9,7 @@ export default function handler(req, res) {
   }
 
   const checks = {
+    openrouter: configured("OPENROUTER_API_KEY"),
     supabase: configured("SUPABASE_URL") && configured("SUPABASE_PUBLISHABLE_KEY"),
     openaiFallback: configured("OPENAI_API_KEY"),
     accountDeletion: configured("SUPABASE_SECRET_KEY"),
@@ -22,7 +23,7 @@ export default function handler(req, res) {
   };
 
   const requiredConfigured =
-    checks.supabase && checks.openaiFallback && checks.accountDeletion;
+    checks.supabase && (checks.openrouter || checks.openaiFallback || checks.googleAdapter) && checks.accountDeletion;
 
   return res.status(requiredConfigured ? 200 : 503).json({
     deploymentStatus: requiredConfigured ? "configured" : "incomplete",

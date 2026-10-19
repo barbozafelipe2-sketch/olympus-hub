@@ -16,6 +16,7 @@ test("API blocks provider spend before reservation and settles failed attempts",
   let allowed=false,failReservation=false,providerCalls=0,settlements=[];
   globalThis.fetch=async(url,options={})=>{
     const path=String(url);
+    if(path.includes('/rest/v1/ai_budget_requests')||path.includes('/rest/v1/ai_response_cache'))return Response.json(null);
     if(path.includes('bind_ai_execution'))return Response.json({allowed:true});
     if(path.includes('authorize_ai_attempt'))return Response.json({allowed:true,attemptId:JSON.parse(options.body).p_event.attemptId});
     if(path === "https://openrouter.ai/api/v1/models")return Response.json(feedFixture());
@@ -37,7 +38,7 @@ test("API blocks provider spend before reservation and settles failed attempts",
     assert.equal((await invoke()).code,429);assert.equal(providerCalls,0);
     failReservation=true;assert.equal((await invoke()).code,503);assert.equal(providerCalls,0);
     failReservation=false;allowed=true;
-    assert.equal((await invoke()).code,502);assert.equal(providerCalls,2); // router + authorized answer attempt
+    assert.equal((await invoke()).code,503);assert.equal(providerCalls,2); // router + authorized answer attempt
     assert.equal(settlements.length,1);
     assert.equal(settlements[0].p_failed,true);
     assert.equal(settlements[0].p_trace.length,2);

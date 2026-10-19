@@ -10,6 +10,7 @@ export const modes: { id: ModeId; label: string; detail: string }[] = [
 ];
 
 const chatResponseSchema = z.object({
+  assistantMessage: z.object({id:z.string(),role:z.literal("assistant"),content:z.string(),createdAt:z.string()}).optional(),
   reply: z.string().min(1),
   requestId: z.string().min(1),
   provider: z.string().min(1),
@@ -37,6 +38,7 @@ export async function sendChat(input: {
   mode: ModeId;
   olympusAuto?: boolean;
   requestId?: string;
+  resumeRequestId?: string;
   projectId?: string | null;
 }) {
   if (!apiBase) throw new Error("The OlyHub API address is not configured.");
@@ -54,6 +56,7 @@ export async function sendChat(input: {
     },
     body: JSON.stringify({
       mode: input.mode,
+      resumeRequestId: input.resumeRequestId,
       olympusAuto: input.olympusAuto === true,
       requestId: input.requestId,
       conversationId: input.conversationId,

@@ -22,6 +22,7 @@ test('budget rejection blocks classification regardless of automatic mode', asyn
   let entitled=false, accountReads=0, reservedMode=null;
   globalThis.fetch=async (url, init={})=>{
     const path=String(url);
+    if(path.includes('/rest/v1/ai_budget_requests')||path.includes('/rest/v1/ai_response_cache'))return Response.json(null);
     if(path.includes('auth/v1/user')) return Response.json({id:'11111111-1111-4111-8111-111111111111',aud:'authenticated'});
     if(path.includes('account_limits')) {accountReads++;return Response.json({olympus_entitled:entitled});}
     if(path.includes('reserve_ai_budget')) {reservedMode=JSON.parse(init.body).p_limits.engine;return Response.json({allowed:false,reason:'budget_limit'});}

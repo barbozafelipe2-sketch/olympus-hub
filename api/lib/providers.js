@@ -11,6 +11,7 @@ function stateFor(provider) {
 }
 
 function configured(provider) {
+  if (provider === "openrouter") return Boolean(process.env.OPENROUTER_API_KEY);
   if (provider === "openai") return Boolean(process.env.OPENAI_API_KEY);
   if (provider === "anthropic") return Boolean(process.env.ANTHROPIC_API_KEY);
   if (provider === "google") {
@@ -25,7 +26,7 @@ export function providerAvailable(provider) {
 }
 
 export function configuredProviders() {
-  return ["openai", "anthropic", "google"].filter(providerAvailable);
+  return ["openrouter", "google", "openai", "anthropic"].filter(providerAvailable);
 }
 
 function markSuccess(provider) {
@@ -43,6 +44,7 @@ function markFailure(provider) {
 }
 
 export function modelFor(provider, tier = "economy") {
+  if (provider === "openrouter") return process.env[`OPENROUTER_${tier.toUpperCase()}_MODEL`] || (tier === "premium" ? "anthropic/claude-sonnet-4.5" : "google/gemini-2.5-flash-lite");
   const configured = process.env[`${provider.toUpperCase()}_${tier.toUpperCase()}_MODEL`];
   if (configured) return configured;
   if (provider === "openai") {
@@ -60,6 +62,15 @@ export function modelFor(provider, tier = "economy") {
   return process.env.GOOGLE_AI_MODEL || "gemini-2.5-flash";
 }
 
+export function configuredModels(provider) {
+  const models = ["economy", "premium"].map(tier => ({ model: modelFor(provider,tier), tier }));
+  if (provider === "openrouter") {
+    let extra; try { extra = JSON.parse(process.env.OPENROUTER_MODELS_JSON || '[]'); } catch { throw Error('Invalid OpenRouter catalog configuration.'); }
+    if (!Array.isArray(extra) || extra.length > 24 || extra.some(m => !m || !['economy','premium'].includes(m.tier) || typeof m.model !== 'string' || !/^[a-z0-9-]+\/[a-zA-Z0-9._:/-]+$/.test(m.model))) throw Error('Invalid OpenRouter catalog configuration.');
+    models.push(...extra);
+  }
+  return models.filter((m,i,a) => a.findIndex(x=>x.model===m.model)===i);
+}
 function requestId(response, fallback) {
   return (
     response.headers.get("x-request-id") ||
@@ -324,6 +335,19 @@ async function callGoogle({ system, messages, maxOutputTokens, timeoutMs, model,
   };
 }
 
+async function callOpenRouter({ system, messages, maxOutputTokens, timeoutMs, model, signal }) {
+  const { response, data } = await fetchJson('https://openrouter.ai/api/v1/chat/completions', {
+    method:'POST', headers:{ Authorization:'Bearer '+process.env.OPENROUTER_API_KEY, 'Content-Type':'application/json' },
+    body:JSON.stringify({model, messages:[{role:'system',content:system},...messages], max_tokens:maxOutputTokens, provider:{allow_fallbacks:false}, stream:false})
+  }, timeoutMs, signal);
+  const id=requestId(response,data?.id);
+  const u=data?.usage;
+  const usage=u ? {reported:Number.isSafeInteger(u.prompt_tokens)&&Number.isSafeInteger(u.completion_tokens),inputTokens:numberOrZero(u.prompt_tokens),outputTokens:numberOrZero(u.completion_tokens),cachedInputTokens:numberOrZero(u.prompt_tokens_details?.cached_tokens),reasoningTokens:numberOrZero(u.completion_tokens_details?.reasoning_tokens),totalTokens:numberOrZero(u.total_tokens)||numberOrZero(u.prompt_tokens)+numberOrZero(u.completion_tokens)} : null;
+  const text=data?.choices?.[0]?.message?.content;
+  if(!response.ok || typeof text!=='string' || !text.trim()) throw Object.assign(new Error('OpenRouter request failed.'),{provider:'openrouter',status:response.status,model,requestId:id,usage});
+  return {text:text.trim(),provider:'OpenRouter',providerId:'openrouter',model,requestId:id,usage};
+}
+
 export async function callProvider(
   provider,
   {
@@ -347,7 +371,7 @@ export async function callProvider(
   const input = compactInput(system, messages);
   system = input.system; messages = input.messages;
   maxOutputTokens = Math.min(MAX_OUTPUT_TOKENS, maxOutputTokens);
-  if (selectedModel && ![modelFor(provider, "economy"), modelFor(provider, "premium")].includes(selectedModel)) throw Object.assign(new Error("Executor model is not configured."), { code: "EXECUTOR_MODEL_DENIED", status: 400 });
+  if (selectedModel && !configuredModels(provider).some(m=>m.model===selectedModel)) throw Object.assign(new Error("Executor model is not configured."), { code: "EXECUTOR_MODEL_DENIED", status: 400 });
   const model = selectedModel || modelFor(provider, tier);
   if (!budget?.reserveAuthorized) throw Object.assign(new Error("Paid inference requires a reserved budget."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
   const event = await budget.reserveAuthorized(role, provider, model, system.length + messages.reduce((n,m)=>n+m.content.length,0), maxOutputTokens,
@@ -356,7 +380,9 @@ export async function callProvider(
   const signal = budget?.signal;
   try {
     let result;
-    if (provider === "openai") {
+    if (provider === "openrouter") {
+      result = await callOpenRouter({ system, messages, maxOutputTokens, timeoutMs, model, signal });
+    } else if (provider === "openai") {
       result = await callOpenAI({ system, messages, maxOutputTokens, timeoutMs, model, signal });
     } else if (provider === "anthropic") {
       result = await callAnthropic({

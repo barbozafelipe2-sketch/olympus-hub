@@ -62,10 +62,9 @@ export function AiDataConsentModal({
                 Providers OlyHub may use
               </Text>
               <Text style={{ color: C.muted, lineHeight: 20 }}>
-                OpenAI, Anthropic (Claude), and Google (Gemini). Zeus may route
-                a request to one provider and use OpenAI as a fallback.
+                OpenRouter and the model providers it routes to, plus Google (Gemini), OpenAI and configured Anthropic models. The standard mode selects a model for each task and may use another provider if it fails.
                 Olympus may send relevant context to multiple providers for its
-                council. Web research and image generation may also use OpenAI.
+                council. Web research and image generation may also send relevant context to these providers.
               </Text>
             </View>
             <Text style={{ color: C.dim, fontSize: 12, lineHeight: 18 }}>

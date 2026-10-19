@@ -1,7 +1,7 @@
 import { authorizationFailure, modelCanExecute } from "./execution-policy.js";
 // One metered classification selects a complete execution route. Catalog and policy stay server-owned.
 import { estimateCost, priceCatalog } from "./model-pricing.js";
-import { callProvider, configuredProviders, modelFor } from "./providers.js";
+import { callProvider, configuredProviders, modelFor, configuredModels } from "./providers.js";
 import { requestDomain } from "./model-routing.js";
 import { automaticOlympusEligible, decideGear, redactSecrets } from "./budget.js";
 
@@ -32,14 +32,14 @@ export function executionCatalog(available = configuredProviders()) {
   let overrides = {};
   try { overrides = JSON.parse(process.env.OLYHUB_EXECUTOR_CAPABILITIES_JSON || "{}"); } catch { /* Defaults remain restrictive. */ }
   const seen = new Set();
-  return available.flatMap(provider => ["economy", "premium"].map(tier => {
-    const model = modelFor(provider, tier), key = provider + ":" + model;
+  return available.flatMap(provider => configuredModels(provider).map(({tier,model},index) => {
+    const key = provider + ":" + model;
     if (seen.has(key)) return null;
     seen.add(key);
     const override = overrides?.[model];
     const domains = Array.isArray(override?.domains) ? override.domains.filter(d => ROUTE_DOMAINS.includes(d)) : [...ROUTE_DOMAINS];
     const maxComplexity = COMPLEXITIES.includes(override?.maxComplexity) ? override.maxComplexity : tier === "premium" ? "complex" : "moderate";
-    return { id: provider + ":" + tier, provider, model, tier, domains, maxComplexity, maxOutputTokens: Number.isSafeInteger(override?.maxOutputTokens) && override.maxOutputTokens > 0 ? override.maxOutputTokens : null, contextLength: Number.isSafeInteger(override?.contextLength) && override.contextLength > 0 ? override.contextLength : null,
+    return { id: provider + ":" + tier + (index > 1 ? ":" + index : ""), provider, model, tier, domains, maxComplexity, maxOutputTokens: Number.isSafeInteger(override?.maxOutputTokens) && override.maxOutputTokens > 0 ? override.maxOutputTokens : null, contextLength: Number.isSafeInteger(override?.contextLength) && override.contextLength > 0 ? override.contextLength : null,
       price: null, priceUsdPerMillionTokens: null };
   }).filter(Boolean));
 }

@@ -2201,3 +2201,4 @@ select:focus-visible {
 .topbar:has(.olympus-auto) { height: auto; min-height: 74px; flex-wrap: wrap; }
 .topbar > .olympus-auto { flex-basis: 100%; }
 .project-workspace-header > .olympus-auto { grid-column: 1 / -1; }
+.image-workflow{display:grid;gap:.7rem;margin:.7rem 0;max-width:100%}.image-workflow button{padding:.5rem;border:1px solid #52586a;border-radius:.5rem;background:#191f2b;color:#f6f7fa}.image-workflow textarea{display:block;width:100%;min-height:4rem}.image-version-grid{display:flex;flex-wrap:wrap;gap:.6rem}.image-version-grid label{display:grid;gap:.4rem;max-width:200px}.image-version-grid img{width:100%;border-radius:.5rem}

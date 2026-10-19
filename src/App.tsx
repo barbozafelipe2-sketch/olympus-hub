@@ -123,6 +123,7 @@ export default function App() {
   const [projectError, setProjectError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
+  const [lastAttemptId, setLastAttemptId] = useState<string | undefined>();
   const [failedText, setFailedText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
@@ -440,19 +441,22 @@ export default function App() {
         ]);
       }
 
+      const attemptId=retryText?crypto.randomUUID():persistedUser.id;
+      const resumeRequestId=retryText?lastAttemptId:undefined;
+      setLastAttemptId(attemptId);
       const result = await sendChat(
         {
           messages: nextMessages
             .filter((message) => message.id !== "welcome")
             .slice(-40),
           mode,
-          ...(retryText ? { requestId: crypto.randomUUID() } : {}),
+          requestId: attemptId, resumeRequestId,
           conversationId: conversation.id
         },
         controller.signal
       );
 
-      const assistant = await persistMessage({
+      const assistant = result.assistantMessage || await persistMessage({
         conversationId: conversation.id,
         ownerId: userId,
         role: "assistant",

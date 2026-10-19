@@ -1,3 +1,4 @@
+import { ImageWorkflow } from "../../src/components/ImageWorkflow";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -49,6 +50,7 @@ export default function ChatScreen() {
   const [artifacts, setArtifacts] = useState<NativeArtifact[]>([]);
   const [prompt, setPrompt] = useState("");
   const [olympusAuto, setOlympusAuto] = useState(false);
+  const [lastAttemptId, setLastAttemptId] = useState<string | undefined>();
   const [failedText, setFailedText] = useState<string | null>(null);
   const [mode, setMode] = useState<ModeId>("zeus");
   const [loading, setLoading] = useState(true);
@@ -134,15 +136,18 @@ export default function ChatScreen() {
         await updateConversation(conversationId, { title });
         setConversation({ ...conversation, title });
       }
+      const attemptId=retryText?crypto.randomUUID():userRow.id;
+      const resumeRequestId=retryText?lastAttemptId:undefined;
+      setLastAttemptId(attemptId);
       const result = await sendChat({
         conversationId,
         mode,
         olympusAuto,
-        requestId: retryText ? undefined : userRow.id,
+        requestId: attemptId, resumeRequestId,
         projectId: conversation.project_id,
         messages: next,
       });
-      const assistant = await persistMessage({
+      const assistant = result.assistantMessage || await persistMessage({
         ownerId: session.user.id,
         conversationId,
         role: "assistant",
@@ -531,6 +536,7 @@ export default function ChatScreen() {
                           >
                             {artifact.mime_type} · v{artifact.current_version}
                           </Text>
+{artifact.mime_type.startsWith("image/") && <ImageWorkflow artifactId={artifact.id}/>}
                         </View>
                         <Text
                           onPress={() => void shareArtifact(artifact)}

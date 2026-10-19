@@ -96,6 +96,8 @@ export type ApiQuota = {
 };
 
 export type ApiChatResponse = {
+  assistantMessage?: ChatMessage;
+  replayed?: boolean;
   reply: string;
   requestId: string;
   provider: string;

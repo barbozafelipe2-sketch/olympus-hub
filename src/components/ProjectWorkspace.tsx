@@ -168,6 +168,7 @@ export function ProjectWorkspace({
   const [taskBusy, setTaskBusy] = useState(false);
   const [filesBusy, setFilesBusy] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [lastAttemptId, setLastAttemptId] = useState<string | undefined>();
   const [retryAvailable, setRetryAvailable] = useState(false);
   const [runMeta, setRunMeta] = useState<RunMeta>(null);
   const [error, setError] = useState<string | null>(null);
@@ -463,10 +464,13 @@ export function ProjectWorkspace({
     const timeout = window.setTimeout(() => controller.abort(), 90000);
 
     try {
+      const attemptId=newAttempt?crypto.randomUUID():[...nextMessages].reverse().find(m=>m.role==='user')?.id || crypto.randomUUID();
+      const resumeRequestId=newAttempt?lastAttemptId:undefined;
+      setLastAttemptId(attemptId);
       const result = await sendChat(
         {
           mode,
-          ...(newAttempt ? { requestId: crypto.randomUUID() } : {}),
+          requestId: attemptId, resumeRequestId,
           projectContext: {
             projectId: project.id,
             conversationId
@@ -478,7 +482,7 @@ export function ProjectWorkspace({
         controller.signal
       );
 
-      const assistant = await persistMessage({
+      const assistant = result.assistantMessage || await persistMessage({
         conversationId,
         ownerId,
         role: "assistant",
