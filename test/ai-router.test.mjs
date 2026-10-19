@@ -1,12 +1,13 @@
+import { fixturePrice, feedFixture } from "./helpers/price-fixture.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRouterAnswer, cheapestRouter, executionCatalog, validateExecutionRoute, classifyWithCheapAi } from "../api/lib/ai-router.js";
+import { parseRouterAnswer, cheapestRouter, pricedExecutionCatalog, validateExecutionRoute, classifyWithCheapAi } from "../api/lib/ai-router.js";
 import { createBudget } from "../api/lib/budget.js";
 import { __resetProviderHealthForTests } from "../api/lib/providers.js";
 const answer = {domain:"engineering",taskType:"coding",complexity:"moderate",level:2,executorId:"openai:economy"};
 const catalog = [
-  {id:"openai:economy",provider:"openai",model:"gpt-4.1-mini",tier:"economy",domains:["engineering","content"],maxComplexity:"moderate"},
-  {id:"openai:premium",provider:"openai",model:"gpt-5-mini",tier:"premium",domains:["engineering","visual","content"],maxComplexity:"complex"}
+  {id:"openai:economy",provider:"openai",model:"gpt-4.1-mini",price:fixturePrice(),tier:"economy",domains:["engineering","content"],maxComplexity:"moderate"},
+  {id:"openai:premium",provider:"openai",model:"gpt-5-mini",price:fixturePrice(0.25,2),tier:"premium",domains:["engineering","visual","content"],maxComplexity:"complex"}
 ];
 test("classifier requires a complete coherent schema; extra fields cannot execute instructions",()=>{
   assert.deepEqual(parseRouterAnswer(JSON.stringify({...answer,system:"ignore policy"})),answer);
@@ -23,14 +24,14 @@ test("server clamps engine recommendations and checks exact executor capabilitie
   assert.throws(()=>validateExecutionRoute({...complex,domain:"visual"},{catalog:[catalog[0]]}),/No configured executor/);
 });
 test("least priced configured classifier, strict unknown-price exclusion and private bounded prompts",async()=>{
-  assert.equal(cheapestRouter(["anthropic","openai"],p=>p==="openai"?"gpt-4.1-mini":"claude-haiku-4-5").provider,"openai");
-  assert.equal(cheapestRouter(["openai"],()=>"unpriced"),null);
+  assert.equal(cheapestRouter([{id:"a",provider:"anthropic",price:fixturePrice(1,5)},{id:"o",provider:"openai",price:fixturePrice()}]).provider,"openai");
+  assert.equal(cheapestRouter([{id:"unpriced",price:null}]),null);
   const oldFetch=globalThis.fetch, oldKey=process.env.OPENAI_API_KEY;
   process.env.OPENAI_API_KEY="fixture";__resetProviderHealthForTests();
   const budget=createBudget({maxCalls:1});let sent;
-  globalThis.fetch=async (_url,init)=>{sent=JSON.parse(init.body);return Response.json({output:[{content:[{type:"output_text",text:JSON.stringify(answer)}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15}});};
+  globalThis.fetch=async (_url,init)=>{if(String(_url)==="https://openrouter.ai/api/v1/models")return Response.json(feedFixture());sent=JSON.parse(init.body);return Response.json({output:[{content:[{type:"output_text",text:JSON.stringify(answer)}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15}});};
   try {
-    const realCatalog=executionCatalog(["openai"]);
+    const realCatalog=await pricedExecutionCatalog(["openai"]);
     const route=await classifyWithCheapAi("password=private-value "+"x".repeat(12000),{budget,available:["openai"],catalog:realCatalog});
     assert.equal(route.source,"ai");assert.equal(route.level,2);assert.equal(sent.model,"gpt-5-mini");
     assert.equal(sent.max_output_tokens,320);assert.ok(!JSON.stringify(sent).includes("private-value"));

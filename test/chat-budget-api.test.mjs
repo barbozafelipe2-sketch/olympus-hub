@@ -1,3 +1,4 @@
+import { feedFixture } from "./helpers/price-fixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import handler from "../api/chat.js";
@@ -14,6 +15,7 @@ test("API blocks provider spend before reservation and settles failed attempts",
   let allowed=false,failReservation=false,providerCalls=0,settlements=[];
   globalThis.fetch=async(url,options={})=>{
     const path=String(url);
+    if(path === "https://openrouter.ai/api/v1/models")return Response.json(feedFixture());
     if(path.includes("auth/v1/user"))return Response.json({id:"11111111-1111-4111-8111-111111111111",aud:"authenticated"});
     if(path.includes("reserve_ai_budget"))return failReservation
       ?Response.json({message:"fixture unavailable",code:"fixture"},{status:500})

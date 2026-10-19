@@ -1,6 +1,6 @@
 import { selectRecentHistory } from "./lib/history.js";
 import { savePhaseCheckpoint } from "./lib/phase-checkpoints.js";
-import { classifyWithCheapAi, executionCatalog, validateExecutionRoute } from "./lib/ai-router.js";
+import { classifyWithCheapAi, pricedExecutionCatalog, validateExecutionRoute } from "./lib/ai-router.js";
 import { createHash } from "node:crypto";
 import { CALL_CAPS, compactInput, createBudget, decideGear, evidenceContext } from "./lib/budget.js";
 import { makeBudgetClient, reserveQuota, settleQuota } from "./lib/quota.js";
@@ -579,7 +579,7 @@ export default async function handler(req, res) {
   let webCapability = { context: "", traces: [], sources: [] };
   try {
   if (!isImage) {
-    const catalog = executionCatalog();
+    const catalog = await pricedExecutionCatalog();
     const recommendation = await classifyWithCheapAi(latestUser, { budget, catalog, requestedMode, olympusAuto,
       history: effectiveMessages.slice(0, -1), context: canonicalContext?.project?.goal || "" });
     executionRoute = validateExecutionRoute(recommendation, { catalog, requestedMode, olympusAuto, olympusEntitled: quota.olympusEntitled === true });
@@ -693,7 +693,8 @@ export default async function handler(req, res) {
       routing: { requestedMode, olympusAuto, reason: commercialDecision.reason, router: executionRoute?.source === "ai" ? "economy_ai" : isImage ? "image_capability" : "rules_fallback",
         taskType: executionRoute?.taskType || "image", complexity: executionRoute?.complexity || "moderate", level: executionRoute?.level || 2,
         recommendedLevel: executionRoute?.level ? (executionRoute.recommendedLevel || executionRoute.level) : 2,
-        executor: executionRoute?.executor ? { provider: executionRoute.executor.provider, model: executionRoute.executor.model, tier: executionRoute.executor.tier } : null,
+        executor: executionRoute?.executor ? { provider: executionRoute.executor.provider, model: executionRoute.executor.model, tier: executionRoute.executor.tier, price: executionRoute.executor.price } : null,
+        classificationPrice: executionRoute?.classificationPrice || null, estimatedClassificationUsd: executionRoute?.estimatedClassificationUsd ?? null,
         restrictions: executionRoute?.restrictions || [], fallbackReason: executionRoute?.fallbackReason || null },
       calls: budget.calls, maxCalls: budget.maxCalls, reservedMaxCalls: maxCalls, level: result.orchestration.level || gear,
       degraded: result.orchestration.degraded || capabilityDegraded
@@ -743,6 +744,7 @@ export default async function handler(req, res) {
       usageRecorded
     });
   } catch (error) {
+    const pricingUnavailable = error?.code === "MODEL_PRICING_UNAVAILABLE";
     const timedOut = error instanceof Error && error.name === "AbortError";
     const unavailable =
       error instanceof Error &&
@@ -750,7 +752,8 @@ export default async function handler(req, res) {
 
     const providerRequestId = error?.requestId || requestId;
 
-    await recordExecution(budgetClient, {
+    // The financial request ledger retains pre-inference refusals; legacy execution rows require at least one model call.
+    if (budget.calls > 0) await recordExecution(budgetClient, {
       owner_id: auth.user.id,
       project_id: canonicalContext?.project.id ?? null,
       conversation_id: executionContext?.conversation.id ?? null,
@@ -786,7 +789,8 @@ export default async function handler(req, res) {
     });
 
     return res.status(timedOut ? 504 : unavailable ? 503 : 502).json({
-      error: timedOut
+      code: pricingUnavailable ? "MODEL_PRICING_UNAVAILABLE" : undefined,
+      error: pricingUnavailable ? "Model prices could not be refreshed. Try again." : timedOut
         ? "The AI route timed out."
         : unavailable
           ? "No configured AI route is currently available."

@@ -53,3 +53,7 @@ Financial rows are writable only by the server; authenticated clients can read t
 `npm test` covers actual SQL migration execution, reservation/settlement, RLS and RPC permissions, content deletion retention, expiry, safe defaults, call caps, credential redaction, web budgets and fail-closed API behavior. `npm run build` and `npm run smoke` validate the existing web release contract. No test makes a live paid model request.
 
 Completed model stages are persisted server-side in `ai_stage_checkpoints` when a canonical conversation exists. These are content records, so deleting the conversation deletes them. They do not grant automatic resume or response replay. See [ZEUS_PORT.md](ZEUS_PORT.md) for the remaining integration work.
+
+## Dynamic quotations (item 2)
+
+Classifier and executor choices now require valid price metadata. See [MODEL_PRICING.md](MODEL_PRICING.md). This removes hardcoded routing prices and legacy unversioned price overrides. OpenRouter feed quotations remain explicitly labeled reference estimates for direct-provider execution; dated account-specific quotations can override them. This is separate from token allowance enforcement and does not claim provider-invoice reconciliation.
