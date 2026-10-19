@@ -1,3 +1,4 @@
+import { authorizationFailure } from "./execution-policy.js";
 import { redactSecrets } from "./budget.js";
 const READABLE_MIME_TYPES = new Set([
   "text/plain",
@@ -144,7 +145,8 @@ export async function runWebSearchCapability({ messages, budget = null }) {
   let event = null;
 
   try {
-    event = budget?.reserve("capability:web_search", "openai", model, userText.length, 1800);
+    if (!budget?.reserveAuthorized) throw Object.assign(new Error("Reserved budget required."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
+    event = await budget.reserveAuthorized("capability:web_search", "openai", model, 24000, 1800, { tier: "capability", inputBytes: Buffer.byteLength(userText) + 4096 });
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -153,6 +155,7 @@ export async function runWebSearchCapability({ messages, budget = null }) {
       },
       body: JSON.stringify({
         model,
+        max_output_tokens: 1800,
         instructions:
           "Perform live web research for the user's latest request. Return a compact factual research brief. Prefer primary/reliable sources. Do not add unsupported facts.",
         input: userText,
@@ -220,6 +223,7 @@ export async function runWebSearchCapability({ messages, budget = null }) {
       sources
     };
   } catch (error) {
+    if (authorizationFailure(error)) throw error;
     if (event && event.outcome === "pending") budget.complete(event, null, error);
     return {
       context:
@@ -333,7 +337,8 @@ export async function runImageGenerationCapability({
   let storagePath = null;
 
   try {
-    event = budget?.reserve("capability:generate_image", "openai", routerModel + " + " + imageModel, userText.length, 4096);
+    if (!budget?.reserveAuthorized) throw Object.assign(new Error("Reserved budget required."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
+    event = await budget.reserveAuthorized("capability:generate_image", "openai", routerModel + " + " + imageModel, 24000, 4096, { tier: "capability", inputBytes: Buffer.byteLength(userText) + 4096 });
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -478,6 +483,7 @@ export async function runImageGenerationCapability({
       artifact
     };
   } catch (error) {
+    if (authorizationFailure(error)) throw error;
     if (event && event.outcome === "pending") budget.complete(event, null, error);
     if (storagePath) {
       await client.storage

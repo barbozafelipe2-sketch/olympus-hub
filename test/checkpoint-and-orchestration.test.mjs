@@ -1,3 +1,4 @@
+import { fixtureBudget } from "./helpers/authorization-fixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -67,6 +68,7 @@ test("Olympus degrades to one truthful Zeus route when only one provider is conf
 
   try {
     const result = await executeMode({
+      budget: fixtureBudget({maxCalls:1}),
       mode: "olympus",
       systemContext: "",
       messages: [{ role: "user", content: "Say hello." }]
@@ -101,7 +103,7 @@ test("fallback attempts consume the Compound cap and remain in the trace", async
     return new Response(JSON.stringify({output:[{content:[{type:"output_text",text:"Recovered"}]}],usage:{input_tokens:4,output_tokens:6}}),{status:200});
   };
   try {
-    const result=await executeMode({mode:"zeus",systemContext:"",messages:[{role:"user",content:"Fix this bug"}]});
+    const result=await executeMode({mode:"zeus",budget:fixtureBudget({maxCalls:2}),systemContext:"",messages:[{role:"user",content:"Fix this bug"}]});
     assert.equal(calls,2);assert.equal(result.orchestration.calls,2);
     assert.equal(result.trace.length,2);
     assert.equal(result.trace[0].outcome,"failed");assert.equal(result.trace[1].outcome,"completed");

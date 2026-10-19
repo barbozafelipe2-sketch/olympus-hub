@@ -349,7 +349,9 @@ export async function callProvider(
   maxOutputTokens = Math.min(MAX_OUTPUT_TOKENS, maxOutputTokens);
   if (selectedModel && ![modelFor(provider, "economy"), modelFor(provider, "premium")].includes(selectedModel)) throw Object.assign(new Error("Executor model is not configured."), { code: "EXECUTOR_MODEL_DENIED", status: 400 });
   const model = selectedModel || modelFor(provider, tier);
-  const event = budget?.reserve(role, provider, model, system.length + messages.reduce((n,m)=>n+m.content.length,0), maxOutputTokens);
+  if (!budget?.reserveAuthorized) throw Object.assign(new Error("Paid inference requires a reserved budget."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
+  const event = await budget.reserveAuthorized(role, provider, model, system.length + messages.reduce((n,m)=>n+m.content.length,0), maxOutputTokens,
+    { tier, inputBytes: Buffer.byteLength(system + messages.map(m=>m.content).join("")) });
   timeoutMs = Math.max(1, Math.min(timeoutMs, budget ? budget.remaining() - 5000 : timeoutMs));
   const signal = budget?.signal;
   try {

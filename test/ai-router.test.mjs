@@ -1,3 +1,4 @@
+import { fixtureBudget } from "./helpers/authorization-fixture.js";
 import { fixturePrice, feedFixture } from "./helpers/price-fixture.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,7 +29,7 @@ test("least priced configured classifier, strict unknown-price exclusion and pri
   assert.equal(cheapestRouter([{id:"unpriced",price:null}]),null);
   const oldFetch=globalThis.fetch, oldKey=process.env.OPENAI_API_KEY;
   process.env.OPENAI_API_KEY="fixture";__resetProviderHealthForTests();
-  const budget=createBudget({maxCalls:1});let sent;
+  const budget=fixtureBudget({maxCalls:1});let sent;
   globalThis.fetch=async (_url,init)=>{if(String(_url)==="https://openrouter.ai/api/v1/models")return Response.json(feedFixture());sent=JSON.parse(init.body);return Response.json({output:[{content:[{type:"output_text",text:JSON.stringify(answer)}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15}});};
   try {
     const realCatalog=await pricedExecutionCatalog(["openai"]);

@@ -1,3 +1,4 @@
+import { admissionPolicy } from "./helpers/authorization-fixture.js";
 import { __resetPricingForTests } from "../api/lib/model-pricing.js";
 import { feedFixture } from "./helpers/price-fixture.js";
 import test from 'node:test';
@@ -13,9 +14,11 @@ test('AI-selected level and exact executor reach the pipeline; permissions, budg
  let allowed=true,entitled=true,route,routerFailure=false,priceUnavailable=false,omitReviewerPrices=false,executionWrites=0,sent=[],settlements=[],reservations=[];
  globalThis.fetch=async (url,init={})=>{
   const path=String(url);
+    if(path.includes('bind_ai_execution'))return Response.json({allowed:true});
+    if(path.includes('authorize_ai_attempt'))return Response.json({allowed:true,attemptId:JSON.parse(init.body).p_event.attemptId});
     if(path === "https://openrouter.ai/api/v1/models")return Response.json(priceUnavailable?{data:[]}:omitReviewerPrices?{data:feedFixture().data.filter(m=>m.id.startsWith("openai/"))}:feedFixture());
   if(path.includes('auth/v1/user'))return Response.json({id:'11111111-1111-4111-8111-111111111111',aud:'authenticated'});
-  if(path.includes('reserve_ai_budget')){reservations.push(JSON.parse(init.body));return Response.json({allowed,olympusEntitled:entitled,reason:allowed?null:'budget_limit'});}
+  if(path.includes('reserve_ai_budget')){reservations.push(JSON.parse(init.body));return Response.json({allowed,authorizationPolicy:admissionPolicy(),olympusEntitled:entitled,reason:allowed?null:'budget_limit'});}
   if(path.includes('settle_ai_budget')){settlements.push(JSON.parse(init.body));return Response.json(true);}
   if(path.includes('/rest/v1/executions')){executionWrites++;return Response.json({id:crypto.randomUUID()},{status:201});}
   if(path.includes('/rest/v1/usage_events'))return Response.json(null,{status:201});

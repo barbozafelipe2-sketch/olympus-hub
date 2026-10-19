@@ -1,3 +1,4 @@
+import { fixtureBudget } from "./helpers/authorization-fixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CALL_CAPS, MAX_INPUT_CHARS, compactInput, createBudget, decideGear, evidenceContext } from "../api/lib/budget.js";
@@ -27,9 +28,9 @@ test("safe defaults cannot be disabled with absent or invalid environment limits
 });
 
 test("deadline blocks new attempts and unknown usage retains a conservative charge",()=>{
-  const expired=createBudget({maxCalls:4,startedAt:Date.now()-100000});
+  const expired=fixtureBudget({maxCalls:4,startedAt:Date.now()-100000});
   assert.throws(()=>expired.reserve("author","openai","fixture"),/budget exhausted/);expired.close();
-  const budget=createBudget({maxCalls:1});
+  const budget=fixtureBudget({maxCalls:1});
   try {
     const event=budget.reserve("author","openai","fixture",100,20);
     budget.complete(event,null,{status:504});
@@ -62,7 +63,7 @@ test("all four gears enforce caps and web search shares the cap",async()=>{
   try {
     for(const shouldFail of [false,true])for(const [gear,text] of Object.entries(requests)){
       calls=0;fail=shouldFail;__resetProviderHealthForTests();
-      const budget=createBudget({maxCalls:CALL_CAPS[gear]});
+      const budget=fixtureBudget({maxCalls:CALL_CAPS[gear]});
       try {
         const result=await executeMode({mode:gear.startsWith("compound_plus")||gear==="turbo"?"olympus":"zeus",gear,messages:[{role:"user",content:text}],budget});
         assert.equal(result.orchestration.calls,calls);
@@ -73,7 +74,7 @@ test("all four gears enforce caps and web search shares the cap",async()=>{
       finally{assert.ok(calls<=CALL_CAPS[gear]);assert.equal(budget.events.length,calls);budget.close();}
     }
     fail=false;calls=0;__resetProviderHealthForTests();
-    const budget=createBudget({maxCalls:3});
+    const budget=fixtureBudget({maxCalls:3});
     try {
       const messages=[{role:"user",content:"Pesquise na internet as leis atuais"}];
       const web=await runWebSearchCapability({messages,budget});
@@ -84,7 +85,7 @@ test("all four gears enforce caps and web search shares the cap",async()=>{
       assert.equal(budget.chargedTokens(),45);
     } finally{budget.close();}
     calls=0;__resetProviderHealthForTests();
-    const checkpointBudget=createBudget({maxCalls:4});
+    const checkpointBudget=fixtureBudget({maxCalls:4});
     try {
       await assert.rejects(()=>executeMode({mode:"olympus",gear:"turbo",messages:[{role:"user",content:"Crie um app completo"}],budget:checkpointBudget,onStage:async()=>{throw Object.assign(new Error("fixture"),{code:"CHECKPOINT_PERSISTENCE_FAILED"});}}),e=>e.code==="CHECKPOINT_PERSISTENCE_FAILED");
       assert.equal(calls,1,"checkpoint storage failure must not retry a paid call");

@@ -57,3 +57,7 @@ Completed model stages are persisted server-side in `ai_stage_checkpoints` when 
 ## Dynamic quotations (item 2)
 
 Classifier and executor choices now require valid price metadata. See [MODEL_PRICING.md](MODEL_PRICING.md). This removes hardcoded routing prices and legacy unversioned price overrides. OpenRouter feed quotations remain explicitly labeled reference estimates for direct-provider execution; dated account-specific quotations can override them. This is separate from token allowance enforcement and does not claim provider-invoice reconciliation.
+
+## Per-attempt authorization (item 3)
+
+Apply the new authorization migration before deploying this backend. Every paid dispatch now requires a persisted permit and a bound server execution plan, with fresh account-policy checks. See [SERVER_AUTHORIZATION.md](SERVER_AUTHORIZATION.md) for rollout order, model/context checks, six-entry settlement and existing monetary-accounting limits.

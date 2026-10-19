@@ -1,3 +1,4 @@
+import { createExecutionAuthorization } from "./lib/execution-authorization.js";
 import { selectRecentHistory } from "./lib/history.js";
 import { savePhaseCheckpoint } from "./lib/phase-checkpoints.js";
 import { classifyWithCheapAi, pricedExecutionCatalog, validateExecutionRoute } from "./lib/ai-router.js";
@@ -558,14 +559,14 @@ export default async function handler(req, res) {
   let budgetClient, quota;
   try {
     budgetClient = makeBudgetClient();
-    quota = await reserveQuota(budgetClient, { ownerId: auth.user.id, requestId, fingerprint, maxCalls, kind: isImage ? "image" : "text", mode });
+    quota = await reserveQuota(budgetClient, { ownerId: auth.user.id, requestId, fingerprint, maxCalls, kind: isImage ? "image" : "text", mode, allowOlympus: !isImage && (requestedMode === "olympus" || olympusAuto), allowWeb: hasWeb });
   } catch (error) {
     console.error("Budget reservation unavailable", { code: error?.code });
     return res.status(503).json({ error: "OlyHub could not reserve this account's usage budget.", code: error?.code || "BUDGET_UNAVAILABLE" });
   }
   if (!quota?.allowed) {
     const conflict = ["request_id_reused", "request_already_consumed"].includes(quota?.reason);
-    return res.status(conflict ? 409 : ["account_not_active", "olympus_not_entitled"].includes(quota?.reason) ? 403 : 429).json({
+    return res.status(conflict ? 409 : ["account_not_active", "olympus_not_entitled", "image_not_allowed", "web_not_allowed", "plan_level_not_allowed"].includes(quota?.reason) ? 403 : 429).json({
       error: conflict ? "This request has already been accepted. Check the conversation before submitting a new request." : "This account cannot start another AI request within its current budget.",
       code: quota?.reason, quota
     });
@@ -573,20 +574,29 @@ export default async function handler(req, res) {
   let executionRoute = null;
   let commercialDecision = { engine: mode, reason: isImage ? "image_level_two" : "manual" };
   const startedAt = Date.now();
-  const budget = createBudget({ maxCalls, startedAt });
+  let authorization;
+  try { authorization = createExecutionAuthorization({ client: budgetClient, ownerId: auth.user.id, requestId, quota, requestedMode: mode, isImage, hasWeb }); }
+  catch {
+    const unused = createBudget({ maxCalls });
+    try { await settleQuota(budgetClient, { ownerId: auth.user.id, requestId, budget: unused, failed: true }); } catch { /* Retain admission if settlement cannot be confirmed. */ }
+    finally { unused.close(); }
+    return res.status(503).json({ error: "Execution authorization is not configured.", code: "AI_AUTHORIZATION_UNAVAILABLE" });
+  }
+  const budget = createBudget({ maxCalls, startedAt, authorizeAttempt: authorization.authorizeAttempt });
   let imageCapability = { traces: [], artifact: null };
   let fileCapability = { context: "", traces: [] };
   let webCapability = { context: "", traces: [], sources: [] };
   try {
   if (!isImage) {
-    const catalog = await pricedExecutionCatalog();
+    const catalog = authorization.filterCatalog(await pricedExecutionCatalog());
     const recommendation = await classifyWithCheapAi(latestUser, { budget, catalog, requestedMode, olympusAuto,
       history: effectiveMessages.slice(0, -1), context: canonicalContext?.project?.goal || "" });
     executionRoute = validateExecutionRoute(recommendation, { catalog, requestedMode, olympusAuto, olympusEntitled: quota.olympusEntitled === true });
     mode = executionRoute.mode; gear = executionRoute.gear;
     budget.maxCalls = Math.min(maxCalls, budget.calls + CALL_CAPS[gear] + (hasWeb ? 1 : 0) + (gear === "simple" ? 1 : 0));
+    await authorization.bindExecution(executionRoute, budget.maxCalls);
     commercialDecision = { engine: mode, reason: executionRoute.source === "ai" ? "ai_complexity" : "rules_fallback" };
-  }
+  } else { await authorization.bindImage(); }
   if (canonicalContext) {
     try {
       canonicalContext = await refreshConversationCheckpoint(
@@ -744,6 +754,8 @@ export default async function handler(req, res) {
       usageRecorded
     });
   } catch (error) {
+    const authorizationDenied = error?.code === "AI_AUTHORIZATION_DENIED";
+    const authorizationUnavailable = String(error?.code || "").startsWith("AI_AUTHORIZATION_") && !authorizationDenied;
     const pricingUnavailable = error?.code === "MODEL_PRICING_UNAVAILABLE";
     const timedOut = error instanceof Error && error.name === "AbortError";
     const unavailable =
@@ -788,9 +800,10 @@ export default async function handler(req, res) {
       requestId
     });
 
-    return res.status(timedOut ? 504 : unavailable ? 503 : 502).json({
-      code: pricingUnavailable ? "MODEL_PRICING_UNAVAILABLE" : undefined,
-      error: pricingUnavailable ? "Model prices could not be refreshed. Try again." : timedOut
+    return res.status(authorizationDenied ? 403 : authorizationUnavailable ? 503 : timedOut ? 504 : unavailable ? 503 : 502).json({
+      reason: authorizationDenied ? error.reason : undefined,
+      code: authorizationDenied || authorizationUnavailable ? error.code : pricingUnavailable ? "MODEL_PRICING_UNAVAILABLE" : undefined,
+      error: authorizationDenied ? "This account cannot continue the selected execution within its current plan or budget." : authorizationUnavailable ? "Execution authorization could not be verified. Try again." : pricingUnavailable ? "Model prices could not be refreshed. Try again." : timedOut
         ? "The AI route timed out."
         : unavailable
           ? "No configured AI route is currently available."

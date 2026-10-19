@@ -60,7 +60,7 @@ export function parsePriceFeed(body, now = Date.now()) {
     if (models.has(row.id) || duplicates.has(row.id)) { models.delete(row.id); duplicates.add(row.id); continue; }
     const completionLimit = row.top_provider?.max_completion_tokens;
     if (completionLimit != null && (!Number.isSafeInteger(completionLimit) || completionLimit < 320)) continue;
-    const price = { ...rates, source: 'openrouter_reference', rawPricing: row.pricing, contextLength: row.context_length, modelId: row.id };
+    const price = { ...rates, source: 'openrouter_reference', rawPricing: row.pricing, maxOutputTokens: completionLimit ?? null, contextLength: row.context_length, modelId: row.id };
     if (Number.isFinite(estimateCost(price, { now }))) models.set(row.id, price);
   }
   if (!models.size) throw Error('Catalog contains no usable text prices.');

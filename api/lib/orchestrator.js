@@ -1,3 +1,4 @@
+import { authorizationFailure, modelCanExecute } from "./execution-policy.js";
 import { orderProviders, requestDomain, modelFamily } from "./model-routing.js";
 import { estimateCost } from "./model-pricing.js";
 import { callProvider, configuredProviders, modelFor } from "./providers.js";
@@ -13,7 +14,7 @@ export function aggregateUsage(trace = []) {
   return total;
 }
 
-function terminal(error) { return error?.code === "CHECKPOINT_PERSISTENCE_FAILED" || [400, 401, 402, 403, 413, 422].includes(Number(error?.status)); }
+function terminal(error) { return authorizationFailure(error) || error?.code === "CHECKPOINT_PERSISTENCE_FAILED" || [400, 401, 402, 403, 413, 422].includes(Number(error?.status)); }
 
 export async function executeMode({ mode, systemContext = "", messages, budget = null, gear = null, route = null, onStage = null }) {
   if (!["zeus", "olympus"].includes(mode)) throw new Error("Unsupported OlyHub mode.");
@@ -31,16 +32,19 @@ export async function executeMode({ mode, systemContext = "", messages, budget =
   let fallbackUsed = false;
   const successful = [];
   async function run(role, system, turns, { excluded = [], tier = "economy", attempts = 1, stageDomain = domain } = {}) {
+    const stageInput = compactInput(system, turns);
+    const requiredContext = Buffer.byteLength(stageInput.system + stageInput.messages.map(m=>m.content).join("")) + 4096 + 1024;
+    const fits = c => modelCanExecute(c, route, stageDomain) && (c.contextLength || c.price?.contextLength || 0) >= requiredContext;
     const primary = route?.executor && ["lead", "author", "specialist-1"].includes(role) ? route.executor : null;
-    const candidates = orderProviders(available, { role, domain: stageDomain, excluded }).filter(p => !route?.pricedExecutors || route.pricedExecutors.some(c => c.provider === p));
+    const candidates = orderProviders(available, { role, domain: stageDomain, excluded }).filter(p => !route?.pricedExecutors || route.pricedExecutors.some(c => c.provider === p && fits(c) && Number.isFinite(estimateCost(c.price))));
     if (primary && candidates.includes(primary.provider)) candidates.splice(0, 0, ...candidates.splice(candidates.indexOf(primary.provider), 1));
     let error;
     for (const provider of candidates.slice(0, attempts)) {
       if (!budget.canCall()) break;
       try {
         const desiredTier = primary?.tier || tier;
-        const choices = route?.pricedExecutors?.filter(c => c.provider === provider && Number.isFinite(estimateCost(c.price)));
-        const chosen = primary?.provider === provider && Number.isFinite(estimateCost(primary.price)) ? primary : choices?.find(c => c.model === modelFor(provider, desiredTier))
+        const choices = route?.pricedExecutors?.filter(c => c.provider === provider && Number.isFinite(estimateCost(c.price)) && fits(c));
+        const chosen = primary?.provider === provider && fits(primary) && Number.isFinite(estimateCost(primary.price)) ? primary : choices?.find(c => c.model === modelFor(provider, desiredTier))
           || choices?.sort((a,b) => estimateCost(a.price,{inputTokens:8000,outputTokens:4096}) - estimateCost(b.price,{inputTokens:8000,outputTokens:4096}))[0];
         if (choices && !chosen) continue;
         const result = await callProvider(provider, { system, messages: turns, budget, role, tier: chosen?.tier || desiredTier, model: chosen?.model || null, maxOutputTokens: 4096, timeoutMs: 25000 });

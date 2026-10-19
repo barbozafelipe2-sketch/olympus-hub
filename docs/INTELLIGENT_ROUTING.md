@@ -33,3 +33,5 @@ Response telemetry includes selected task type, complexity, recommended/applied 
 Item 1 did not include schema migration, subscription integration, gateway migration or Comparison/Combine UI. Dynamic price metadata was added separately in item 2. Existing commercial-budget migrations and server accounting configuration remain required.
 
 Validation: mocked API tests cover all stage counts, exact model selection, independent Level 2 review, automatic-Off, entitlement denial, rejected budgets before inference, malformed/unknown classifier output, failed-classifier accounting and direct model-override rejection. No paid live inference was used to validate quality or latency.
+
+Item 3 adds mandatory persisted per-attempt authorization. See [SERVER_AUTHORIZATION.md](SERVER_AUTHORIZATION.md); the new RPC migration is required before paid execution.

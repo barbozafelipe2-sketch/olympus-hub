@@ -60,30 +60,50 @@ export function automaticOlympusEligible(messages) {
   return substantive && decideGear("zeus", messages) === "compound";
 }
 
-export function createBudget({ maxCalls, startedAt = Date.now(), timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+export function createBudget({ maxCalls, startedAt = Date.now(), timeoutMs = REQUEST_TIMEOUT_MS, authorizeAttempt = null } = {}) {
+  if (!Number.isSafeInteger(maxCalls) || maxCalls < 1 || maxCalls > 6) throw new Error("Invalid execution call cap.");
+  let callCap = maxCalls;
   const events = [];
   const deadline = startedAt + timeoutMs;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, deadline - Date.now()));
   timer.unref?.();
   return {
-    maxCalls, events, signal: controller.signal,
-    get calls() { return events.length; },
+    get maxCalls() { return callCap; },
+    set maxCalls(value) { if (!Number.isSafeInteger(value) || value < events.length || value > callCap) throw new Error("Execution cap can only narrow."); callCap = value; },
+    events, signal: controller.signal,
+    get calls() { return events.filter(e => e.outcome !== "blocked").length; },
+    get slots() { return events.length; },
     remaining() { return Math.max(0, deadline - Date.now()); },
-    canCall() { return events.length < maxCalls && deadline - Date.now() > 6000 && !controller.signal.aborted; },
+    canCall() { return events.length < callCap && deadline - Date.now() > 6000 && !controller.signal.aborted; },
     reserve(role, provider, model, inputChars = MAX_INPUT_CHARS, outputTokens = MAX_OUTPUT_TOKENS) {
       if (!this.canCall()) throw Object.assign(new Error("AI execution budget exhausted."), { code: "AI_BUDGET_EXHAUSTED", status: 503 });
-      const event = { role, provider, providerId: provider, model, requestId: crypto.randomUUID(), outcome: "pending", usage: null,
+      if (!Number.isSafeInteger(inputChars) || inputChars < 0 || inputChars > MAX_INPUT_CHARS || !Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > MAX_OUTPUT_TOKENS) throw new Error("Invalid attempt token bounds.");
+      const event = { attemptId: crypto.randomUUID(), inputChars, outputTokens, role, provider, providerId: provider, model, requestId: crypto.randomUUID(), outcome: "pending", usage: null,
         // A byte/character upper bound, not a fabricated measurement. Retained if usage is unknown.
         reservedTokens: Math.ceil(inputChars * 4) + outputTokens };
       events.push(event);
       return event;
     },
+    async reserveAuthorized(role, provider, model, inputChars = MAX_INPUT_CHARS, outputTokens = MAX_OUTPUT_TOKENS, metadata = {}) {
+      const event = this.reserve(role,provider,model,inputChars,outputTokens);
+      Object.assign(event, { tier: metadata.tier, inputBytes: metadata.inputBytes ?? inputChars * 4 });
+      try {
+        if (typeof authorizeAttempt !== "function") throw Object.assign(new Error("Paid inference requires server authorization."), { code: "AI_AUTHORIZATION_REQUIRED", status: 503 });
+        await authorizeAttempt(Object.freeze({ ...event }));
+        if (controller.signal.aborted || deadline - Date.now() <= 5000) throw Object.assign(new Error("Execution authorization expired."), { code: "AI_AUTHORIZATION_EXPIRED", status: 503 });
+        event.authorized = true; return event;
+      } catch (error) {
+        event.authorized = false; event.outcome = "blocked"; event.usage = { reported: true, totalTokens: 0 }; event.reservedTokens = 0; throw error;
+      }
+    },
     complete(event, result, error = null) {
+      if (!events.includes(event) || event.outcome !== "pending") throw new Error("Invalid attempt completion.");
       event.outcome = error ? "failed" : "completed";
       event.requestId = result?.requestId || error?.requestId || event.requestId;
       event.model = result?.model || event.model;
-      event.usage = result?.usage || error?.usage || null;
+      const usage = result?.usage || error?.usage || null;
+      event.usage = usage?.reported === true && (!Number.isSafeInteger(usage.totalTokens) || usage.totalTokens < 0) ? null : usage;
       event.status = error?.status || null;
     },
     chargedTokens() { return events.reduce((n, e) => n + (e.usage?.reported === true ? e.usage.totalTokens : e.reservedTokens), 0); },

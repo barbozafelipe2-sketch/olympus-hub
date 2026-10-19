@@ -1,3 +1,4 @@
+import { admissionPolicy } from "./helpers/authorization-fixture.js";
 import { feedFixture } from "./helpers/price-fixture.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,11 +16,13 @@ test("API blocks provider spend before reservation and settles failed attempts",
   let allowed=false,failReservation=false,providerCalls=0,settlements=[];
   globalThis.fetch=async(url,options={})=>{
     const path=String(url);
+    if(path.includes('bind_ai_execution'))return Response.json({allowed:true});
+    if(path.includes('authorize_ai_attempt'))return Response.json({allowed:true,attemptId:JSON.parse(options.body).p_event.attemptId});
     if(path === "https://openrouter.ai/api/v1/models")return Response.json(feedFixture());
     if(path.includes("auth/v1/user"))return Response.json({id:"11111111-1111-4111-8111-111111111111",aud:"authenticated"});
     if(path.includes("reserve_ai_budget"))return failReservation
       ?Response.json({message:"fixture unavailable",code:"fixture"},{status:500})
-      :Response.json({allowed,reason:allowed?null:"budget_limit"});
+      :Response.json({allowed,authorizationPolicy:admissionPolicy(),reason:allowed?null:"budget_limit"});
     if(path.includes("settle_ai_budget")){settlements.push(JSON.parse(options.body));return Response.json(true);}
     if(path.includes("rest/v1/executions"))return Response.json({id:crypto.randomUUID()},{status:201});
     if(path.includes("openai.com")){providerCalls++;return Response.json({error:{message:"fixture outage"}},{status:503});}

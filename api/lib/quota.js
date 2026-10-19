@@ -20,11 +20,11 @@ export function makeBudgetClient() {
   if (!process.env.SUPABASE_URL || !key) throw Object.assign(new Error("Server budget storage is not configured."), { code: "BUDGET_NOT_CONFIGURED" });
   return createClient(process.env.SUPABASE_URL, key, { global: { fetch: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10000) }) }, auth: { persistSession: false, autoRefreshToken: false } });
 }
-export async function reserveQuota(client, { ownerId, requestId, fingerprint, maxCalls, kind = "text", mode = "zeus" }) {
+export async function reserveQuota(client, { ownerId, requestId, fingerprint, maxCalls, kind = "text", mode = "zeus", allowOlympus = false, allowWeb = false }) {
   const { data, error } = await client.rpc("reserve_ai_budget", {
     p_owner_id: ownerId, p_request_id: requestId, p_fingerprint: fingerprint,
     p_reserved_tokens: maxCalls * (MAX_INPUT_CHARS * 4 + MAX_OUTPUT_TOKENS),
-    p_limits: { ...configuredLimits(), engine: mode }, p_kind: kind
+    p_limits: { ...configuredLimits(), engine: mode, maxCalls, allowOlympus, allowWeb }, p_kind: kind
   });
   if (error) throw Object.assign(new Error("Account budget could not be reserved."), { code: "BUDGET_STORAGE_UNAVAILABLE" });
   return data;
